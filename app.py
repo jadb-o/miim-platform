@@ -470,17 +470,23 @@ with tab_sectors:
     st.caption("Morocco's priority industrial sectors and their key statistics.")
 
     if not df_filtered.empty:
+        # Build aggregation dict based on available columns
+        agg_dict = {
+            "company_count": ("company_name", "count"),
+            "total_employees": ("employee_count", lambda x: x.astype(float).sum()),
+            "cities": ("headquarters_city", lambda x: x.dropna().nunique()),
+        }
+        if "investment_amount_mad" in df_filtered.columns:
+            agg_dict["total_investment"] = ("investment_amount_mad", lambda x: x.astype(float).sum())
+
         sector_stats = (
             df_filtered.groupby("sector_name")
-            .agg(
-                company_count=("company_name", "count"),
-                total_employees=("employee_count", lambda x: x.astype(float).sum()),
-                total_investment=("investment_amount_mad", lambda x: x.astype(float).sum()),
-                cities=("headquarters_city", lambda x: x.dropna().nunique()),
-            )
+            .agg(**agg_dict)
             .reset_index()
             .sort_values("company_count", ascending=False)
         )
+        if "total_investment" not in sector_stats.columns:
+            sector_stats["total_investment"] = 0
 
         # Grid of sector cards
         cols = st.columns(3)
