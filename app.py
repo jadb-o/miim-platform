@@ -137,7 +137,7 @@ def load_companies():
     sb = get_supabase_client()
     resp = (
         sb.table("companies")
-        .select("*, sectors(sector_name, target_integration_pct)")
+        .select("*, sectors(sector_name, target_integration_pct, government_strategy, source_url, source_name_detail)")
         .order("company_name")
         .execute()
     )
@@ -146,6 +146,9 @@ def load_companies():
         sector_info = r.pop("sectors", None) or {}
         r["sector_name"] = sector_info.get("sector_name", "Unknown")
         r["sector_target_pct"] = sector_info.get("target_integration_pct")
+        r["sector_source_url"] = sector_info.get("source_url")
+        r["sector_source_name"] = sector_info.get("source_name_detail")
+        r["sector_strategy"] = sector_info.get("government_strategy")
     return pd.DataFrame(rows)
 
 
@@ -947,6 +950,19 @@ def show_sector_dialog(sector_name):
         # Sector network map
         st.markdown("##### 🕸️ Sector Network Map")
         _render_sector_network(sector_name, sector_df)
+
+        # Source citation
+        first_co = sector_df.iloc[0] if not sector_df.empty else None
+        if first_co is not None:
+            src_url = first_co.get("sector_source_url")
+            src_name = first_co.get("sector_source_name")
+            strategy = first_co.get("sector_strategy")
+            if src_url and pd.notna(src_url):
+                st.markdown("---")
+                st.markdown(f"📎 **Source**: [{src_name}]({src_url})")
+            elif strategy and pd.notna(strategy):
+                st.markdown("---")
+                st.markdown(f"📎 **Strategy**: {strategy}")
     _dialog()
 
 
@@ -1078,6 +1094,22 @@ with tab_sectors:
                     font=dict(family="Arial", color=NAVY),
                 )
                 st.plotly_chart(fig_target, use_container_width=True)
+
+                # Source citations for integration targets
+                source_rows = (
+                    df_filtered.groupby("sector_name")
+                    .agg(
+                        strategy=("sector_strategy", "first"),
+                        src_url=("sector_source_url", "first"),
+                        src_name=("sector_source_name", "first"),
+                    )
+                    .dropna(subset=["src_url"])
+                    .reset_index()
+                )
+                if not source_rows.empty:
+                    with st.expander("📎 Sources", expanded=False):
+                        for _, src in source_rows.iterrows():
+                            st.markdown(f"- **{src['sector_name']}**: [{src['src_name']}]({src['src_url']})")
     else:
         st.info("No data matches the current filters.")
 
