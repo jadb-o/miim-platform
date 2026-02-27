@@ -871,10 +871,19 @@ def show_sector_dialog(sector_name):
     # Biggest players table
     st.markdown("##### 🏆 Biggest Players")
     top_companies = sector_df.sort_values("employee_count", ascending=False).head(15)
-    top_display = top_companies[["company_name", "headquarters_city", "ownership_type", "employee_count", "parent_company"]].copy()
-    top_display.columns = ["Company", "City", "Ownership", "Employees", "Parent"]
-    top_display["Employees"] = top_display["Employees"].astype(float).map(lambda x: f"{x:,.0f}" if pd.notna(x) else "—")
-    st.dataframe(top_display, use_container_width=True, hide_index=True)
+    display_cols = ["company_name", "headquarters_city", "ownership_type", "employee_count", "website_url", "parent_company"]
+    display_cols = [c for c in display_cols if c in top_companies.columns]
+    top_display = top_companies[display_cols].copy()
+    col_rename = {"company_name": "Company", "headquarters_city": "City", "ownership_type": "Ownership", "employee_count": "Employees", "website_url": "🌐 Website", "parent_company": "Parent"}
+    top_display.columns = [col_rename.get(c, c) for c in top_display.columns]
+    if "Employees" in top_display.columns:
+        top_display["Employees"] = top_display["Employees"].astype(float).map(lambda x: f"{x:,.0f}" if pd.notna(x) else "—")
+    if "🌐 Website" in top_display.columns:
+        top_display["🌐 Website"] = top_display["🌐 Website"].fillna("—")
+    st.dataframe(
+        top_display, use_container_width=True, hide_index=True,
+        column_config={"🌐 Website": st.column_config.LinkColumn("🌐 Website", display_text="Visit")} if "🌐 Website" in top_display.columns else None,
+    )
 
     # City breakdown
     col_chart, col_ownership = st.columns(2)
@@ -1078,9 +1087,13 @@ with tab_directory:
 
             with cols[idx % 3]:
                 sector_icon = SECTOR_ICONS.get(sector, "📦")
-                card_label = f"🏢 **{co['company_name']}**  \n{sector_icon} {sector}  \n📍 {city if city else '—'} · 👥 {emp_str} employees"
+                website = co.get("website_url", "")
+                website_line = f"  \n🌐 {website}" if website and pd.notna(website) else ""
+                card_label = f"🏢 **{co['company_name']}**  \n{sector_icon} {sector}  \n📍 {city if city else '—'} · 👥 {emp_str} employees{website_line}"
                 if st.button(card_label, key=f"co_btn_{start}_{idx}", use_container_width=True):
                     show_company_dialog(co["company_name"])
+                if website and pd.notna(website):
+                    st.markdown(f'<a href="{website}" target="_blank" style="font-size:0.78rem; color:{TEAL}; text-decoration:none;">🌐 {website}</a>', unsafe_allow_html=True)
     else:
         st.info("No data matches the current filters.")
 
