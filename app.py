@@ -740,6 +740,8 @@ with tab_review:
     st.markdown("#### Human-in-the-Loop Review Queue")
     st.markdown("Review and approve low-confidence extractions before they enter the database.")
 
+    sb = get_supabase_client()
+
     # ── Pipeline stats row ──
     p_stats = get_pipeline_stats(sb)
     pcol1, pcol2, pcol3, pcol4 = st.columns(4)
