@@ -402,14 +402,6 @@ st.markdown(
             font-size: 0.95rem !important;
         }}
 
-        /* ── Pill buttons below charts ── */
-        .chart-pills {{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.4rem;
-            margin-top: 0.5rem;
-        }}
-
         .profile-card {{
             background: white;
             border-radius: 14px;
@@ -1101,16 +1093,14 @@ with tab_sectors:
                 margin=dict(l=20, r=80, t=20, b=40), height=350,
                 font=dict(family="Arial", color=NAVY),
             )
-            st.plotly_chart(fig_bar, use_container_width=True)
-            # Clickable sector pills below chart
-            st.caption("Click a sector to explore:")
-            pill_cols = st.columns(min(len(sector_counts), 4))
-            for p_idx, (_, p_row) in enumerate(sector_counts.iterrows()):
-                s_name = p_row["sector_name"]
-                s_icon = SECTOR_ICONS.get(s_name, "📦")
-                with pill_cols[p_idx % min(len(sector_counts), 4)]:
-                    if st.button(f"{s_icon} {s_name}", key=f"pill_sector_{p_idx}", use_container_width=True):
-                        show_sector_dialog(s_name)
+            event_bar = st.plotly_chart(fig_bar, use_container_width=True, on_select="rerun", key="chart_sector_bar")
+            if event_bar.selection.points:
+                _sel = event_bar.selection.points[0].get("y", "")
+                if _sel and st.session_state.get("_last_sector_bar") != _sel:
+                    st.session_state["_last_sector_bar"] = _sel
+                    show_sector_dialog(_sel)
+            else:
+                st.session_state.pop("_last_sector_bar", None)
 
         with col_right:
             st.markdown("##### 🏛️ Companies by Ownership Type")
@@ -1129,31 +1119,27 @@ with tab_sectors:
                     font=dict(family="Arial", color=NAVY), paper_bgcolor="white",
                 )
                 fig_pie.update_traces(textinfo="label+percent", textposition="outside")
-                st.plotly_chart(fig_pie, use_container_width=True)
-                # Clickable ownership pills below pie chart
-                st.caption("Click an ownership type to see companies:")
-                own_pills = st.columns(min(len(ownership_counts), 3))
-                for o_idx, (_, o_row) in enumerate(ownership_counts.iterrows()):
-                    o_name = o_row["ownership_type"]
-                    o_count = o_row["count"]
-                    with own_pills[o_idx % min(len(ownership_counts), 3)]:
-                        if st.button(f"🏛️ {o_name} ({o_count})", key=f"pill_own_{o_idx}", use_container_width=True):
-                            # Show companies list in an expander below
-                            st.session_state[f"_show_own_{o_name}"] = True
+                event_pie = st.plotly_chart(fig_pie, use_container_width=True, on_select="rerun", key="chart_own_pie")
+                if event_pie.selection.points:
+                    _pt = event_pie.selection.points[0]
+                    _own_sel = _pt.get("label", "")
+                    if _own_sel:
+                        st.session_state["_active_ownership"] = _own_sel
+                else:
+                    st.session_state.pop("_active_ownership", None)
 
-                # Show companies for clicked ownership type
-                for _, o_row in ownership_counts.iterrows():
-                    o_name = o_row["ownership_type"]
-                    if st.session_state.get(f"_show_own_{o_name}"):
-                        matching = df_filtered[df_filtered["ownership_type"].fillna("Unknown") == o_name]
-                        with st.expander(f"🏛️ {o_name} — {len(matching)} companies", expanded=True):
-                            co_cols = st.columns(2)
-                            for ci, (_, co) in enumerate(matching.head(20).iterrows()):
-                                co_name = co["company_name"]
-                                with co_cols[ci % 2]:
-                                    if st.button(f"🏢 {co_name}", key=f"own_co_{o_name}_{ci}", use_container_width=True):
-                                        show_company_dialog(co_name)
-                        st.session_state[f"_show_own_{o_name}"] = False
+                # Show companies for the selected ownership type
+                if "_active_ownership" in st.session_state:
+                    _own = st.session_state["_active_ownership"]
+                    matching = df_filtered[df_filtered["ownership_type"].fillna("Unknown") == _own]
+                    if not matching.empty:
+                        st.caption(f"🏛️ **{_own}** — {len(matching)} companies:")
+                        co_cols = st.columns(2)
+                        for ci, (_, co) in enumerate(matching.head(20).iterrows()):
+                            co_name = co["company_name"]
+                            with co_cols[ci % 2]:
+                                if st.button(f"🏢 {co_name}", key=f"own_co_{ci}", use_container_width=True):
+                                    show_company_dialog(co_name)
 
         # Sector integration targets
         if "sector_target_pct" in df_filtered.columns:
@@ -1183,18 +1169,14 @@ with tab_sectors:
                     margin=dict(l=20, r=60, t=20, b=40), height=300,
                     font=dict(family="Arial", color=NAVY),
                 )
-                st.plotly_chart(fig_target, use_container_width=True)
-
-                # Clickable sector pills below integration targets chart
-                st.caption("Click a sector for details:")
-                tgt_pills = st.columns(min(len(sector_targets), 4))
-                for t_idx, (_, t_row) in enumerate(sector_targets.iterrows()):
-                    t_name = t_row["sector_name"]
-                    t_icon = SECTOR_ICONS.get(t_name, "📦")
-                    t_pct = t_row["target_pct"]
-                    with tgt_pills[t_idx % min(len(sector_targets), 4)]:
-                        if st.button(f"{t_icon} {t_name} ({t_pct:.0f}%)", key=f"pill_tgt_{t_idx}", use_container_width=True):
-                            show_sector_dialog(t_name)
+                event_tgt = st.plotly_chart(fig_target, use_container_width=True, on_select="rerun", key="chart_integ_tgt")
+                if event_tgt.selection.points:
+                    _tsel = event_tgt.selection.points[0].get("y", "")
+                    if _tsel and st.session_state.get("_last_tgt_bar") != _tsel:
+                        st.session_state["_last_tgt_bar"] = _tsel
+                        show_sector_dialog(_tsel)
+                else:
+                    st.session_state.pop("_last_tgt_bar", None)
 
                 # Source citations for integration targets
                 source_rows = (
