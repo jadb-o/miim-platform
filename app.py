@@ -41,7 +41,7 @@ def get_supabase_client():
 # ── Color palette ────────────────────────────────────────
 NAVY = "#1B3A5C"
 TEAL = "#2A9D8F"
-LIGHT_BG = "#F0F5F8"
+LIGHT_BG = "#F7F9FB"
 CORAL = "#E76F51"
 GOLD = "#E9C46A"
 SAND = "#F4A261"
@@ -258,7 +258,7 @@ def load_sectors():
 
 st.set_page_config(
     page_title="MIIM — Morocco Industry Intelligence Monitor",
-    page_icon="🏭",
+    page_icon="🇲🇦",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -267,78 +267,158 @@ st.set_page_config(
 st.markdown(
     f"""
     <style>
+        /* ── Global resets ── */
+        .block-container {{
+            padding: 1.5rem 2rem !important;
+        }}
+
+        /* ── Header ── */
         .main-header {{
             background: linear-gradient(135deg, {NAVY} 0%, {TEAL} 100%);
-            padding: 1.5rem 2rem;
-            border-radius: 10px;
-            margin-bottom: 1.5rem;
+            padding: 2rem 2.5rem;
+            border-radius: 14px;
+            margin-bottom: 2rem;
         }}
         .main-header h1 {{
             color: white !important;
             margin: 0 !important;
-            font-size: 1.8rem !important;
+            font-size: 1.6rem !important;
+            font-weight: 600 !important;
         }}
         .main-header p {{
-            color: rgba(255,255,255,0.85) !important;
-            margin: 0.3rem 0 0 0 !important;
-            font-size: 0.95rem !important;
+            color: rgba(255,255,255,0.8) !important;
+            margin: 0.4rem 0 0 0 !important;
+            font-size: 0.9rem !important;
+            font-weight: 300 !important;
         }}
+
+        /* ── Metric cards ── */
         div[data-testid="stMetric"] {{
-            background-color: {LIGHT_BG};
+            background-color: white;
             border-left: 4px solid {TEAL};
-            padding: 0.8rem 1rem;
-            border-radius: 6px;
+            padding: 1.2rem 1.5rem;
+            border-radius: 14px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+            transition: box-shadow 0.2s ease;
+        }}
+        div[data-testid="stMetric"]:hover {{
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         }}
         div[data-testid="stMetric"] label {{
             color: {NAVY} !important;
+            font-weight: 500 !important;
         }}
+
+        /* ── Sidebar ── */
         section[data-testid="stSidebar"] {{
             background-color: {LIGHT_BG};
         }}
         section[data-testid="stSidebar"] h1 {{
             color: {NAVY} !important;
-            font-size: 1.1rem !important;
+            font-size: 1rem !important;
+            font-weight: 600 !important;
         }}
+
+        /* ── Tabs ── */
+        button[data-baseweb="tab"] {{
+            font-weight: 500 !important;
+            font-size: 0.9rem !important;
+            padding: 0.6rem 1.2rem !important;
+            border-radius: 10px 10px 0 0 !important;
+            transition: all 0.2s ease;
+        }}
+        button[data-baseweb="tab"]:hover {{
+            background-color: rgba(42, 157, 143, 0.08) !important;
+        }}
+
+        /* ── Cards ── */
         .sector-card {{
             background: white;
-            border-radius: 10px;
-            padding: 1.2rem;
+            border-radius: 14px;
+            padding: 1.5rem;
             border-left: 5px solid {TEAL};
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-            margin-bottom: 0.8rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+            margin-bottom: 1rem;
+            transition: box-shadow 0.2s ease, transform 0.2s ease;
+        }}
+        .sector-card:hover {{
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+            transform: translateY(-1px);
         }}
         .sector-card h3 {{
             color: {NAVY};
             margin: 0 0 0.5rem 0;
-            font-size: 1.1rem;
+            font-size: 1rem;
+            font-weight: 600;
         }}
         .sector-card .stat {{
-            font-size: 0.9rem;
-            color: #555;
+            font-size: 0.85rem;
+            color: #666;
         }}
+
         .profile-card {{
             background: white;
-            border-radius: 10px;
-            padding: 1.5rem;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-            margin-bottom: 1rem;
+            border-radius: 14px;
+            padding: 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            margin-bottom: 1.5rem;
+            transition: box-shadow 0.2s ease;
+        }}
+        .profile-card:hover {{
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
         }}
         .profile-header {{
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
+            margin-bottom: 1.2rem;
         }}
         .profile-header h2 {{
             color: {NAVY};
             margin: 0;
+            font-weight: 600;
         }}
         .profile-badge {{
             background: {TEAL};
             color: white;
             padding: 0.3rem 0.8rem;
             border-radius: 20px;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }}
+
+        /* ── Tables ── */
+        .stDataFrame {{
+            border-radius: 14px !important;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+        }}
+
+        /* ── Buttons ── */
+        .stButton > button {{
+            border-radius: 10px !important;
+            font-weight: 500 !important;
+            transition: all 0.2s ease !important;
+            padding: 0.5rem 1.2rem !important;
+        }}
+        .stButton > button:hover {{
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+        }}
+
+        /* ── Expanders ── */
+        details {{
+            border-radius: 14px !important;
+            border: 1px solid #E8ECF0 !important;
+        }}
+
+        /* ── Softer typography ── */
+        h1, h2, h3, h4 {{
+            font-weight: 600 !important;
+        }}
+        .stMarkdown p {{
+            font-weight: 400;
+            line-height: 1.6;
         }}
     </style>
     """,
@@ -349,8 +429,8 @@ st.markdown(
 st.markdown(
     """
     <div class="main-header">
-        <h1>🏭 Morocco Industry Intelligence Monitor</h1>
-        <p>Comprehensive platform mapping Morocco's industrial landscape — companies, supply chains, partnerships, and market intelligence.</p>
+        <h1>Morocco Industry Intelligence Monitor</h1>
+        <p>Mapping Morocco's industrial landscape — companies, supply chains, partnerships, and market intelligence.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -460,7 +540,7 @@ with col5:
 # ══════════════════════════════════════════════════════════
 
 tab_sectors, tab_directory, tab_profile, tab_network, tab_map, tab_events, tab_review = st.tabs(
-    ["🏭 Sectors", "📋 Directory", "🏢 Company Profile", "🕸️ Network Map", "🗺️ Map", "📰 Events", "🔍 Review Queue"]
+    ["Sectors", "Directory", "Company Profile", "Network Map", "Map", "Events", "Review Queue"]
 )
 
 
@@ -851,7 +931,7 @@ with tab_network:
             <link href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.6/vis-network.min.css" rel="stylesheet">
             <style>
                 body {{ margin: 0; padding: 0; font-family: Arial, sans-serif; }}
-                #network {{ width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 8px; }}
+                #network {{ width: 100%; height: 600px; border: 1px solid #E8ECF0; border-radius: 14px; }}
                 #legend {{ padding: 8px 12px; font-size: 12px; color: #555; }}
             </style>
         </head>
@@ -1025,8 +1105,8 @@ with tab_events:
 
             st.markdown(
                 f"""
-                <div style="background:{LIGHT_BG}; padding:1rem; border-radius:8px;
-                            border-left:4px solid {TEAL}; margin-bottom:0.8rem;">
+                <div style="background:white; padding:1.5rem; border-radius:14px;
+                            border-left:4px solid {TEAL}; margin-bottom:1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <span style="font-size:1.1rem; font-weight:600; color:{NAVY};">
                             {event_icon} {ev.get('title', 'Event')}

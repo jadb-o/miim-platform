@@ -15,10 +15,14 @@ from extraction.extract_company_data import extract_company_data
 from pipeline.database_writer import DatabaseWriter
 from scrapers.challenge_scraper import ChallengeScraper
 from scrapers.fnh_scraper import FnhScraper
+from scrapers.hespress_scraper import HespressScraper
+from scrapers.lavieeco_scraper import LavieEcoScraper
 from scrapers.leconomiste_scraper import LeconomisteScraper
 from scrapers.leseco_scraper import LesecoScraper
 from scrapers.mapbusiness_scraper import MapBusinessScraper
 from scrapers.mcinet_scraper import McinetScraper
+from scrapers.medias24_scraper import Medias24Scraper
+from scrapers.telquel_scraper import TelquelScraper
 
 # Set up logging
 logging.basicConfig(
@@ -54,6 +58,10 @@ class PipelineOrchestrator:
             LeconomisteScraper(self.supabase),
             FnhScraper(self.supabase),
             MapBusinessScraper(self.supabase),
+            Medias24Scraper(self.supabase),
+            LavieEcoScraper(self.supabase),
+            TelquelScraper(self.supabase),
+            HespressScraper(self.supabase),
         ]
 
         for scraper in scrapers:
@@ -267,13 +275,21 @@ def main():
         "--reprocess", action="store_true", default=False,
         help="Reset all articles to pending and re-extract with v2 prompt",
     )
+    parser.add_argument(
+        "--quality-pass", action="store_true", default=False,
+        help="Run data quality pass (dedup, NULL fill, normalize). Dry-run by default.",
+    )
+    parser.add_argument(
+        "--commit-quality", action="store_true", default=False,
+        help="Apply quality pass changes (default: dry-run)",
+    )
 
     args = parser.parse_args()
 
     scrape = args.full or args.scrape
     extract = args.full or args.extract
 
-    if not scrape and not extract and not args.reprocess:
+    if not scrape and not extract and not args.reprocess and not args.quality_pass:
         parser.print_help()
         return
 
@@ -287,7 +303,11 @@ def main():
 
     orchestrator = PipelineOrchestrator(supabase, openai_api_key)
 
-    if args.reprocess:
+    if args.quality_pass:
+        from pipeline.quality_assurance import QualityAssurance
+        qa = QualityAssurance(supabase, commit=args.commit_quality)
+        results = qa.run()
+    elif args.reprocess:
         logger.info("Resetting all articles to pending for v2 re-extraction...")
         supabase.table("articles").update(
             {"processing_status": "pending", "error_message": None}

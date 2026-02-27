@@ -1,4 +1,4 @@
-"""Scraper for Medias24 (medias24.com) business news site."""
+"""Scraper for Hespress French edition (fr.hespress.com) news site."""
 import logging
 import re
 from typing import Any, Dict, List, Optional
@@ -11,13 +11,13 @@ from scrapers.scraper_utils import clean_article_text, parse_french_date
 logger = logging.getLogger(__name__)
 
 
-class Medias24Scraper(BaseScraper):
-    """Scraper for https://medias24.com articles."""
+class HespressScraper(BaseScraper):
+    """Scraper for https://fr.hespress.com articles (French edition)."""
 
-    BASE_URL = "https://medias24.com"
+    BASE_URL = "https://fr.hespress.com"
 
     def __init__(self, supabase_client: Client, rate_limit: float = 3.0):
-        super().__init__("Medias24", supabase_client, rate_limit=rate_limit)
+        super().__init__("Hespress FR", supabase_client, rate_limit=rate_limit)
         self.categories = ["/economie", "/entreprises"]
 
     def get_article_urls(self) -> List[str]:
@@ -30,7 +30,7 @@ class Medias24Scraper(BaseScraper):
                     if page == 1:
                         cat_url = f"{self.BASE_URL}{category}"
                     else:
-                        cat_url = f"{self.BASE_URL}{category}?page={page}"
+                        cat_url = f"{self.BASE_URL}{category}/page/{page}"
                     logger.debug(f"Fetching: {cat_url}")
 
                     response = self.session.get(cat_url)
@@ -42,14 +42,14 @@ class Medias24Scraper(BaseScraper):
                     soup = BeautifulSoup(response.text, "html.parser")
                     found_on_page = 0
 
-                    # Article tags
+                    # Hespress uses card-style article listings
                     for article_elem in soup.find_all("article"):
                         link = article_elem.find("a", href=True)
                         if link:
                             href = link["href"]
                             if not href.startswith("http"):
                                 href = self.BASE_URL + href
-                            if href not in urls and "medias24.com" in href:
+                            if href not in urls and "hespress.com" in href:
                                 urls.append(href)
                                 found_on_page += 1
 
@@ -61,18 +61,38 @@ class Medias24Scraper(BaseScraper):
                                 href = link["href"]
                                 if not href.startswith("http"):
                                     href = self.BASE_URL + href
-                                if href not in urls and "medias24.com" in href and "/category/" not in href:
+                                if href not in urls and "hespress.com" in href and "/category/" not in href:
                                     urls.append(href)
                                     found_on_page += 1
 
-                    # Fallback: long slug links
+                    # Fallback: card div links
+                    if found_on_page == 0:
+                        for card in soup.find_all("div", class_=re.compile(r"card|post|news|item")):
+                            link = card.find("a", href=True)
+                            if link:
+                                href = link["href"]
+                                if not href.startswith("http"):
+                                    href = self.BASE_URL + href
+                                if href not in urls and "hespress.com" in href:
+                                    urls.append(href)
+                                    found_on_page += 1
+
+                    # Last fallback: long slug links
                     if found_on_page == 0:
                         for link in soup.find_all("a", href=True):
                             href = link["href"]
                             if not href.startswith("http"):
                                 href = self.BASE_URL + href
                             slug = href.rstrip("/").split("/")[-1]
-                            if "medias24.com" in href and href not in urls and len(slug) > 20 and "/category/" not in href and "/tag/" not in href:
+                            if (
+                                "hespress.com" in href
+                                and href not in urls
+                                and len(slug) > 20
+                                and "/category/" not in href
+                                and "/tag/" not in href
+                                and "/page/" not in href
+                                and "/author/" not in href
+                            ):
                                 urls.append(href)
                                 found_on_page += 1
 
@@ -80,7 +100,7 @@ class Medias24Scraper(BaseScraper):
                 except Exception as e:
                     logger.error(f"Error fetching {category} page {page}: {str(e)}")
 
-        logger.info(f"Found {len(urls)} article URLs from Medias24")
+        logger.info(f"Found {len(urls)} article URLs from Hespress FR")
         return urls[:50]
 
     def scrape_article(self, url: str) -> Optional[Dict[str, Any]]:
@@ -92,8 +112,9 @@ class Medias24Scraper(BaseScraper):
             from bs4 import BeautifulSoup
             soup = BeautifulSoup(response.text, "html.parser")
 
+            # Extract title
             title = None
-            for sel in ["h1.article-title", "h1.entry-title", "h1"]:
+            for sel in ["h1.post-title", "h1.entry-title", "h1.article-title", "h1"]:
                 elem = soup.select_one(sel)
                 if elem:
                     title = elem.get_text(strip=True)
@@ -105,6 +126,7 @@ class Medias24Scraper(BaseScraper):
             if not title:
                 return None
 
+            # Extract date
             published_date = None
             time_elem = soup.find("time")
             if time_elem:
@@ -114,32 +136,57 @@ class Medias24Scraper(BaseScraper):
                 if meta_date and meta_date.get("content"):
                     published_date = parse_french_date(meta_date["content"])
             if not published_date:
-                match = re.search(r'\d{1,2}\s+(?:janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+\d{4}', soup.get_text(), re.IGNORECASE)
+                # Hespress sometimes uses "Le DD mois YYYY" format
+                match = re.search(
+                    r'(?:le\s+)?\d{1,2}\s+(?:janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+\d{4}',
+                    soup.get_text(), re.IGNORECASE,
+                )
                 if match:
                     published_date = parse_french_date(match.group())
 
+            # Extract article text
             article_text = None
-            article = soup.find("article")
-            if article:
-                for tag in article.find_all(["header", "footer", "nav", "aside", "script", "style", "figure"]):
-                    tag.decompose()
-                paragraphs = article.find_all("p")
-                if paragraphs:
-                    article_text = " ".join(p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20)
 
-            if not article_text or len(article_text) < 100:
-                for sel in ["div.article-body", "div.entry-content", "div.post-content", "main"]:
-                    elem = soup.select_one(sel)
-                    if elem:
+            # Hespress uses div.article-content or similar
+            for sel in ["div.article-content", "div.post-content", "div.entry-content", "div.single-post-content"]:
+                elem = soup.select_one(sel)
+                if elem:
+                    for tag in elem.find_all(["script", "style", "aside", "nav", "figure", "iframe"]):
+                        tag.decompose()
+                    paragraphs = elem.find_all("p")
+                    if paragraphs:
+                        article_text = " ".join(p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20)
+                    if not article_text or len(article_text) < 100:
                         article_text = clean_article_text(str(elem))
-                        if article_text and len(article_text) > 100:
-                            break
+                    if article_text and len(article_text) > 100:
+                        break
+
+            # Fallback: article tag
+            if not article_text or len(article_text) < 100:
+                article = soup.find("article")
+                if article:
+                    for tag in article.find_all(["header", "footer", "nav", "aside", "script", "style", "figure"]):
+                        tag.decompose()
+                    paragraphs = article.find_all("p")
+                    if paragraphs:
+                        article_text = " ".join(p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20)
+
+            # Last fallback: main tag
+            if not article_text or len(article_text) < 100:
+                main = soup.find("main")
+                if main:
+                    article_text = clean_article_text(str(main))
 
             if not article_text or len(article_text) < 50:
                 return None
 
             logger.info(f"Successfully scraped: {title[:60]}...")
-            return {"title": title[:500], "published_date": published_date.isoformat() if published_date else None, "article_text": article_text, "language": "fr"}
+            return {
+                "title": title[:500],
+                "published_date": published_date.isoformat() if published_date else None,
+                "article_text": article_text,
+                "language": "fr",
+            }
         except Exception as e:
             logger.error(f"Error scraping article {url}: {str(e)}")
             return None
