@@ -328,8 +328,8 @@ with col4:
 #  TAB LAYOUT
 # ══════════════════════════════════════════════════════════
 
-tab_table, tab_chart, tab_network, tab_map, tab_events = st.tabs(
-    ["📋 Company Directory", "📊 Integration Analysis", "🔗 Partnership Network", "🗺️ Map", "📰 Events"]
+tab_table, tab_chart, tab_network, tab_map, tab_events, tab_review = st.tabs(
+    ["📋 Company Directory", "📊 Integration Analysis", "🔗 Partnership Network", "🗺️ Map", "📰 Events", "🔍 Review Queue"]
 )
 
 # ─── TAB 1: Company Directory Table ─────────────────────
@@ -731,6 +731,117 @@ with tab_events:
             )
     else:
         st.info("No events recorded yet.")
+
+
+# ─── TAB 6: Review Queue ─────────────────────────────────
+with tab_review:
+    from review_ui.review_helpers import load_review_items, get_review_stats, approve_item, reject_item, get_pipeline_stats
+
+    st.markdown("#### Human-in-the-Loop Review Queue")
+    st.markdown("Review and approve low-confidence extractions before they enter the database.")
+
+    # ── Pipeline stats row ──
+    p_stats = get_pipeline_stats(sb)
+    pcol1, pcol2, pcol3, pcol4 = st.columns(4)
+    with pcol1:
+        st.metric("Total Articles Scraped", p_stats["total_articles"])
+    with pcol2:
+        st.metric("Pending Extraction", p_stats["pending_extraction"])
+    with pcol3:
+        st.metric("Extracted", p_stats["extracted"])
+    with pcol4:
+        st.metric("Pipeline Cost (USD)", f"${p_stats['total_cost_usd']:.2f}")
+
+    st.divider()
+
+    # ── Review stats row ──
+    r_stats = get_review_stats(sb)
+    rcol1, rcol2, rcol3, rcol4 = st.columns(4)
+    with rcol1:
+        st.metric("Pending Review", r_stats["pending"])
+    with rcol2:
+        st.metric("Approved (7d)", r_stats["approved_7d"])
+    with rcol3:
+        st.metric("Rejected (7d)", r_stats["rejected_7d"])
+    with rcol4:
+        st.metric("Avg Confidence", f"{r_stats['avg_confidence']:.0%}")
+
+    st.divider()
+
+    # ── Load pending items ──
+    review_items = load_review_items(sb, status="pending", limit=20)
+
+    if not review_items:
+        st.success("No items pending review. The pipeline is running smoothly.")
+    else:
+        st.info(f"**{len(review_items)}** items awaiting your review")
+
+        for idx, item in enumerate(review_items):
+            ext = item["extracted_data"] if isinstance(item["extracted_data"], dict) else {}
+            conf_pct = f"{item['confidence_score']:.0%}" if item["confidence_score"] else "N/A"
+            company = ext.get("company_name", "Unknown Company")
+
+            with st.expander(
+                f"[{conf_pct}] **{company}** — {item['source_name']} ({item.get('published_date', '')[:10]})",
+                expanded=(idx == 0),
+            ):
+                # ── Article info ──
+                col_left, col_right = st.columns([3, 1])
+                with col_left:
+                    st.markdown(f"**Article**: {item['article_title']}")
+                    if item["source_url"]:
+                        st.markdown(f"**Source**: [{item['source_name']}]({item['source_url']})")
+                    snippet = (item.get("article_text") or "")[:500]
+                    if snippet:
+                        st.text_area("Article Preview", value=snippet + "...", height=120, disabled=True, key=f"preview_{idx}")
+                with col_right:
+                    st.metric("Confidence", conf_pct)
+                    st.markdown(f"**Flagged**: {item['reason_flagged']}")
+
+                # ── Extracted data ──
+                st.markdown("**Extracted Data:**")
+                d1, d2 = st.columns(2)
+                with d1:
+                    st.markdown(f"- **Company**: {ext.get('company_name', 'N/A')}")
+                    st.markdown(f"- **Sector**: {ext.get('sector', 'N/A')}")
+                    st.markdown(f"- **City**: {ext.get('city', 'N/A')}")
+                    st.markdown(f"- **Sub-sector**: {ext.get('sub_sector', 'N/A')}")
+                with d2:
+                    st.markdown(f"- **Event**: {ext.get('event_type', 'N/A')}")
+                    amt = ext.get("investment_amount_mad")
+                    st.markdown(f"- **Investment (MAD)**: {f'{amt:,.0f}' if amt else 'N/A'}")
+                    partners = ext.get("partner_companies", [])
+                    st.markdown(f"- **Partners**: {', '.join(partners) if partners else 'None'}")
+                    st.markdown(f"- **Summary**: {ext.get('source_summary', 'N/A')}")
+
+                # ── Actions ──
+                a1, a2, a3 = st.columns(3)
+                with a1:
+                    if st.button("✅ Approve", key=f"approve_{item['id']}"):
+                        if approve_item(sb, item["id"]):
+                            st.success(f"Approved! {company} added to database.")
+                            st.rerun()
+                        else:
+                            st.error("Failed to approve. Check logs.")
+                with a2:
+                    reject_notes = st.text_input("Rejection reason", key=f"reject_notes_{item['id']}", placeholder="Optional...")
+                    if st.button("❌ Reject", key=f"reject_{item['id']}"):
+                        if reject_item(sb, item["id"], notes=reject_notes):
+                            st.info(f"Rejected: {company}")
+                            st.rerun()
+                        else:
+                            st.error("Failed to reject.")
+                with a3:
+                    st.markdown("*Edit & Approve coming soon*")
+
+    # ── Recent scraper runs ──
+    if p_stats["recent_runs"]:
+        st.divider()
+        st.markdown("#### Recent Scraper Runs")
+        runs_df = pd.DataFrame(p_stats["recent_runs"])
+        if not runs_df.empty:
+            display_cols = [c for c in ["source_name", "run_date", "articles_found", "articles_new", "articles_duplicate", "status"] if c in runs_df.columns]
+            st.dataframe(runs_df[display_cols], use_container_width=True, hide_index=True)
 
 
 # ── Footer ───────────────────────────────────────────────
