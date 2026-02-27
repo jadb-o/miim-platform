@@ -281,6 +281,12 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ── Session state for deferred dialog opens ──────────────
+if "open_sector_dialog" not in st.session_state:
+    st.session_state.open_sector_dialog = None
+if "open_company_dialog" not in st.session_state:
+    st.session_state.open_company_dialog = None
+
 # ── Custom CSS ───────────────────────────────────────────
 st.markdown(
     f"""
@@ -1031,6 +1037,18 @@ def show_company_dialog(company_name):
     _dialog()
 
 
+# ── Handle deferred dialog opens from chart clicks ───────
+if st.session_state.open_sector_dialog:
+    _sector = st.session_state.open_sector_dialog
+    st.session_state.open_sector_dialog = None
+    show_sector_dialog(_sector)
+
+if st.session_state.open_company_dialog:
+    _company = st.session_state.open_company_dialog
+    st.session_state.open_company_dialog = None
+    show_company_dialog(_company)
+
+
 # ══════════════════════════════════════════════════════════
 #  TAB LAYOUT
 # ══════════════════════════════════════════════════════════
@@ -1094,11 +1112,11 @@ with tab_sectors:
                 font=dict(family="Arial", color=NAVY),
             )
             event_bar = st.plotly_chart(fig_bar, use_container_width=True, on_select="rerun", key="chart_sector_bar")
-            # Handle click on bar → open sector dialog
             if event_bar and event_bar.selection and event_bar.selection.points:
                 clicked_sector = event_bar.selection.points[0].get("y")
                 if clicked_sector and clicked_sector in all_sectors:
-                    show_sector_dialog(clicked_sector)
+                    st.session_state.open_sector_dialog = clicked_sector
+                    st.rerun()
 
         with col_right:
             st.markdown("##### 🏛️ Companies by Ownership Type")
@@ -1127,7 +1145,8 @@ with tab_sectors:
                             for _, co in matching.head(10).iterrows():
                                 co_name = co["company_name"]
                                 if st.button(f"🏢 {co_name}", key=f"own_{co_name}"):
-                                    show_company_dialog(co_name)
+                                    st.session_state.open_company_dialog = co_name
+                                    st.rerun()
 
         # Sector integration targets
         if "sector_target_pct" in df_filtered.columns:
@@ -1161,7 +1180,8 @@ with tab_sectors:
                 if event_target and event_target.selection and event_target.selection.points:
                     clicked_sector = event_target.selection.points[0].get("y")
                     if clicked_sector and clicked_sector in all_sectors:
-                        show_sector_dialog(clicked_sector)
+                        st.session_state.open_sector_dialog = clicked_sector
+                        st.rerun()
 
                 # Source citations for integration targets
                 source_rows = (
