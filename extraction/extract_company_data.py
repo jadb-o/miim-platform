@@ -1,15 +1,16 @@
 """
 MIIM — Morocco Industry Intelligence Monitor
-LLM-Powered Extraction Pipeline
+LLM-Powered Extraction Pipeline v2
 
-This module takes raw French/Arabic news text about Moroccan industry
-and returns structured JSON using the OpenAI GPT-4o API.
+Extracts comprehensive company profiles and relationships from
+French/Arabic news articles about Moroccan industry.
 
 Usage:
     from extraction.extract_company_data import extract_company_data
 
     result = extract_company_data(article_text)
-    print(result["company_name"], result["confidence_score"])
+    for entity in result["entities"]:
+        print(entity["company_name"], entity["description"])
 
 Environment:
     Requires OPENAI_API_KEY in environment or .env file.
@@ -38,34 +39,80 @@ VALID_EVENT_TYPES = [
     "investment",
     "acquisition",
     "export_milestone",
+    "expansion",
+    "hiring",
+    "product_launch",
+    "certification",
     "other",
+]
+
+VALID_RELATIONSHIP_TYPES = [
+    "client",
+    "supplier",
+    "partner",
+    "subsidiary",
+    "parent",
+    "investor",
+    "joint_venture",
+    "competitor",
 ]
 
 SYSTEM_PROMPT = """You are a structured data extraction engine for the Morocco Industry Intelligence Monitor (MIIM).
 
-Your task is to read a news article (in French, Arabic, or Darija) about Moroccan industry and extract structured data as a JSON object. You MUST return ONLY valid JSON — no markdown, no commentary, no explanation.
+Your task is to read a news article (in French, Arabic, or Darija) about Moroccan industry and extract ALL companies mentioned along with comprehensive profiles and relationships. Return ONLY valid JSON — no markdown, no commentary.
 
 Return this exact JSON structure:
 {
-  "company_name": "Primary company mentioned (string or null)",
-  "sector": "Industry sector (string or null). Use one of: Automotive, Aerospace, Agrifood, Textiles & Leather, Electronics, Pharmaceuticals, Renewable Energy, Mining & Phosphates, Construction Materials, Other",
-  "sub_sector": "More specific classification (string or null), e.g. Wiring Harnesses, Vehicle Assembly, Metal Stamping",
-  "event_type": "One of: new_factory, partnership, investment, acquisition, export_milestone, other",
-  "partner_companies": ["List of other companies mentioned as partners, clients, or suppliers"],
-  "investment_amount_mad": null or number in Moroccan Dirhams. Convert from EUR (multiply by ~11) or USD (multiply by ~10) if needed. Set null if not mentioned,
-  "city": "Moroccan city where the event takes place (string or null)",
-  "source_summary": "One-sentence summary of the article in English",
-  "confidence_score": 0.0 to 1.0
+  "entities": [
+    {
+      "company_name": "Company legal or trade name (string, required)",
+      "description": "What the company does — one or two sentences (string or null)",
+      "activities": "Core business activities, products, or services (string or null)",
+      "sector": "One of: Automotive, Aerospace, Agrifood, Textiles & Leather, Electronics, Pharmaceuticals, Renewable Energy, Mining & Phosphates, Construction Materials, Fishing & Seafood, Other",
+      "sub_sector": "More specific classification (string or null)",
+      "value_chain_position": "Position in industry value chain (string or null). Examples: Raw Materials, Tier 3 Components, Tier 2 Sub-Assembly, Tier 1 Systems, OEM Assembly, Distribution, Services",
+      "event_type": "One of: new_factory, partnership, investment, acquisition, export_milestone, expansion, hiring, product_launch, certification, other",
+      "city": "Moroccan city (string or null)",
+      "investment_amount_mad": null or number in Moroccan Dirhams. Convert EUR (×11) or USD (×10),
+      "employee_count": null or integer if mentioned,
+      "revenue_mad": null or number if annual revenue mentioned (convert to MAD),
+      "website_url": "Company website if mentioned (string or null)",
+      "parent_company": "Parent or holding company name if mentioned (string or null)",
+      "ownership_type": "One of: Moroccan Private, Foreign Private, State-Owned, Joint Venture, Multinational, Public (Listed), Unknown",
+      "management_mentions": [
+        {"name": "Person name", "role": "Job title or role"}
+      ],
+      "mention_type": "primary_subject or mentioned",
+      "confidence_score": 0.0 to 1.0
+    }
+  ],
+  "relationships": [
+    {
+      "source_company": "Company A name",
+      "target_company": "Company B name",
+      "relationship_type": "One of: client, supplier, partner, subsidiary, parent, investor, joint_venture, competitor",
+      "description": "Brief description of the relationship"
+    }
+  ],
+  "article_summary": "Two-sentence English summary of the article",
+  "overall_confidence": 0.0 to 1.0
 }
 
+EXTRACTION RULES:
+1. Extract ALL companies mentioned in the article, not just the primary one.
+2. For each company, fill in as many fields as possible from the text. Leave null if not mentioned.
+3. The "entities" array must have at least one entry. If no company is identifiable, set company_name to null.
+4. Relationships should capture explicit connections: who supplies whom, who partnered with whom, parent-subsidiary, etc.
+5. "mention_type" should be "primary_subject" for the main company(ies) the article is about, and "mentioned" for others.
+
 CONFIDENCE RULES:
-- Set confidence_score BELOW 0.7 if ANY field is uncertain or inferred rather than explicitly stated.
-- Set confidence_score BELOW 0.5 if the article is not clearly about Moroccan industry.
-- Set confidence_score ABOVE 0.85 only if ALL fields are directly stated in the text.
+- Below 0.7: Any field is uncertain or inferred rather than explicitly stated.
+- Below 0.5: Article is not clearly about Moroccan industry or companies.
+- Above 0.85: ALL key fields (company_name, sector, event_type) are directly stated.
 
 LANGUAGE HANDLING:
-- The article may be in French, Modern Standard Arabic, or Moroccan Darija.
-- Always output field VALUES in English, except for proper nouns (company names, city names) which should remain in their original form.
+- Articles may be in French, Arabic, or Darija.
+- Output all field VALUES in English, except proper nouns (company names, city names, person names) which remain in original form.
 - If a company name appears in Arabic, also provide the Latin transliteration if recognizable.
 
 OUTPUT: Return ONLY the JSON object. No other text."""
@@ -73,20 +120,25 @@ OUTPUT: Return ONLY the JSON object. No other text."""
 
 # ── Schema validation ────────────────────────────────────
 
-def _validate_extracted_data(data: dict) -> dict:
-    """
-    Validates and normalizes the extracted data against the MIIM schema.
-    Fills missing fields with None and clamps confidence_score to [0, 1].
-    """
+def _validate_entity(data: dict) -> dict:
+    """Validate and normalize a single extracted entity."""
     schema_defaults = {
         "company_name": None,
+        "description": None,
+        "activities": None,
         "sector": None,
         "sub_sector": None,
+        "value_chain_position": None,
         "event_type": "other",
-        "partner_companies": [],
-        "investment_amount_mad": None,
         "city": None,
-        "source_summary": None,
+        "investment_amount_mad": None,
+        "employee_count": None,
+        "revenue_mad": None,
+        "website_url": None,
+        "parent_company": None,
+        "ownership_type": "Unknown",
+        "management_mentions": [],
+        "mention_type": "mentioned",
         "confidence_score": 0.5,
     }
 
@@ -96,16 +148,17 @@ def _validate_extracted_data(data: dict) -> dict:
 
     # Normalize event_type
     if validated["event_type"] not in VALID_EVENT_TYPES:
-        logger.warning(
-            f"Invalid event_type '{validated['event_type']}' — defaulting to 'other'"
-        )
+        logger.warning(f"Invalid event_type '{validated['event_type']}' — defaulting to 'other'")
         validated["event_type"] = "other"
-        # Reduce confidence because the model misclassified
-        validated["confidence_score"] = min(validated["confidence_score"], 0.6)
+        validated["confidence_score"] = min(validated.get("confidence_score", 0.5), 0.6)
 
-    # Ensure partner_companies is always a list
-    if not isinstance(validated["partner_companies"], list):
-        validated["partner_companies"] = []
+    # Ensure management_mentions is a list of dicts
+    if not isinstance(validated["management_mentions"], list):
+        validated["management_mentions"] = []
+    validated["management_mentions"] = [
+        m for m in validated["management_mentions"]
+        if isinstance(m, dict) and m.get("name")
+    ]
 
     # Clamp confidence_score
     try:
@@ -113,15 +166,96 @@ def _validate_extracted_data(data: dict) -> dict:
     except (TypeError, ValueError):
         validated["confidence_score"] = 0.5
 
-    # Round investment amount if present
-    if validated["investment_amount_mad"] is not None:
+    # Validate numeric fields
+    for field in ["investment_amount_mad", "revenue_mad"]:
+        if validated[field] is not None:
+            try:
+                validated[field] = round(float(validated[field]), 2)
+            except (TypeError, ValueError):
+                validated[field] = None
+
+    if validated["employee_count"] is not None:
         try:
-            validated["investment_amount_mad"] = round(float(validated["investment_amount_mad"]), 2)
+            validated["employee_count"] = int(validated["employee_count"])
         except (TypeError, ValueError):
-            validated["investment_amount_mad"] = None
-            validated["confidence_score"] = min(validated["confidence_score"], 0.6)
+            validated["employee_count"] = None
+
+    # Normalize mention_type
+    if validated["mention_type"] not in ("primary_subject", "mentioned", "quoted"):
+        validated["mention_type"] = "mentioned"
 
     return validated
+
+
+def _validate_relationship(data: dict) -> dict | None:
+    """Validate a single relationship entry."""
+    source = data.get("source_company", "").strip()
+    target = data.get("target_company", "").strip()
+    rel_type = data.get("relationship_type", "").strip().lower()
+
+    if not source or not target:
+        return None
+    if source == target:
+        return None
+    if rel_type not in VALID_RELATIONSHIP_TYPES:
+        rel_type = "partner"  # Default to partner
+
+    return {
+        "source_company": source,
+        "target_company": target,
+        "relationship_type": rel_type,
+        "description": data.get("description", ""),
+    }
+
+
+def _validate_extracted_data(data: dict) -> dict:
+    """Validate the full v2 extraction output."""
+    result = {
+        "entities": [],
+        "relationships": [],
+        "article_summary": data.get("article_summary") or data.get("source_summary", ""),
+        "overall_confidence": 0.5,
+    }
+
+    # Handle v1 format (single entity, no "entities" array) for backward compatibility
+    if "entities" not in data and "company_name" in data:
+        # Convert v1 to v2 format
+        data["entities"] = [data]
+        data["relationships"] = []
+        data["overall_confidence"] = data.get("confidence_score", 0.5)
+
+    # Validate entities
+    raw_entities = data.get("entities", [])
+    if not isinstance(raw_entities, list):
+        raw_entities = [raw_entities] if raw_entities else []
+
+    for entity in raw_entities:
+        if isinstance(entity, dict):
+            validated_entity = _validate_entity(entity)
+            result["entities"].append(validated_entity)
+
+    # Validate relationships
+    raw_relationships = data.get("relationships", [])
+    if not isinstance(raw_relationships, list):
+        raw_relationships = []
+
+    for rel in raw_relationships:
+        if isinstance(rel, dict):
+            validated_rel = _validate_relationship(rel)
+            if validated_rel:
+                result["relationships"].append(validated_rel)
+
+    # Compute overall confidence
+    if result["entities"]:
+        confidences = [e["confidence_score"] for e in result["entities"]]
+        result["overall_confidence"] = round(sum(confidences) / len(confidences), 2)
+    else:
+        try:
+            result["overall_confidence"] = max(0.0, min(1.0, float(data.get("overall_confidence", 0.5))))
+        except (TypeError, ValueError):
+            result["overall_confidence"] = 0.5
+
+    return result
 
 
 # ── Core extraction function ─────────────────────────────
@@ -137,21 +271,12 @@ def extract_company_data(
     Extract structured company/industry data from a French or Arabic
     news article about Moroccan industry.
 
-    Args:
-        article_text: Raw article text (French, Arabic, or Darija).
-        api_key:      OpenAI API key. Falls back to OPENAI_API_KEY env var.
-        model:        Model to use (default: gpt-4o).
-        max_retries:  Number of retry attempts on transient failures.
-
-    Returns:
-        A validated dictionary with keys:
-            company_name, sector, sub_sector, event_type,
-            partner_companies, investment_amount_mad, city,
-            source_summary, confidence_score
-
-    Raises:
-        ValueError: If article_text is empty or too short.
-        RuntimeError: If all retry attempts are exhausted.
+    Returns a v2 result with:
+        entities: list of company profiles
+        relationships: list of inter-company relationships
+        article_summary: English summary
+        overall_confidence: average confidence
+        input_tokens, output_tokens: token usage
     """
     # ── Input validation ──
     if not article_text or not article_text.strip():
@@ -167,9 +292,7 @@ def extract_company_data(
     # Truncate extremely long articles to stay within token limits
     MAX_CHARS = 12_000
     if len(cleaned_text) > MAX_CHARS:
-        logger.warning(
-            f"Article truncated from {len(cleaned_text)} to {MAX_CHARS} characters."
-        )
+        logger.warning(f"Article truncated from {len(cleaned_text)} to {MAX_CHARS} characters.")
         cleaned_text = cleaned_text[:MAX_CHARS]
 
     # ── API client ──
@@ -191,7 +314,7 @@ def extract_company_data(
 
             response = client.chat.completions.create(
                 model=model,
-                temperature=0.1,  # Low temperature for deterministic extraction
+                temperature=0.1,
                 response_format={"type": "json_object"},
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
@@ -208,9 +331,22 @@ def extract_company_data(
             # Validate and normalize
             validated = _validate_extracted_data(parsed)
 
+            # Attach token usage
+            usage = response.usage
+            validated["input_tokens"] = usage.prompt_tokens if usage else 0
+            validated["output_tokens"] = usage.completion_tokens if usage else 0
+
+            primary = next(
+                (e for e in validated["entities"] if e.get("mention_type") == "primary_subject"),
+                validated["entities"][0] if validated["entities"] else None,
+            )
+            company_name = primary["company_name"] if primary else "N/A"
+
             logger.info(
-                f"Extraction successful: company='{validated['company_name']}', "
-                f"confidence={validated['confidence_score']}"
+                f"Extraction successful: primary='{company_name}', "
+                f"entities={len(validated['entities'])}, "
+                f"relationships={len(validated['relationships'])}, "
+                f"confidence={validated['overall_confidence']}"
             )
 
             return validated
@@ -235,11 +371,9 @@ def extract_company_data(
             logger.error(f"Attempt {attempt}: OpenAI API error — {e}")
             last_exception = e
 
-            # Don't retry on 4xx client errors (except 429 rate limit)
             if hasattr(e, "status_code") and 400 <= e.status_code < 500 and e.status_code != 429:
                 break
 
-    # All retries exhausted
     raise RuntimeError(
         f"Extraction failed after {max_retries} attempts. Last error: {last_exception}"
     )
@@ -256,8 +390,6 @@ def extract_batch(
     """
     Extract data from multiple articles. Failed extractions are either
     skipped (skip_errors=True) or raise immediately.
-
-    Returns a list of result dicts, each with an added '_source_index' field.
     """
     results = []
     for i, text in enumerate(articles):
@@ -271,7 +403,9 @@ def extract_batch(
                 results.append({
                     "_source_index": i,
                     "_error": str(e),
-                    "confidence_score": 0.0,
+                    "overall_confidence": 0.0,
+                    "entities": [],
+                    "relationships": [],
                 })
             else:
                 raise
@@ -292,7 +426,6 @@ if __name__ == "__main__":
     """
 
     if len(sys.argv) > 1:
-        # Read article from file
         with open(sys.argv[1], "r", encoding="utf-8") as f:
             sample = f.read()
 
