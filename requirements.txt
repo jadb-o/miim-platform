@@ -1,0 +1,32 @@
+# MIIM — Morocco Industry Intelligence Monitor
+# Core dependencies
+
+# LLM extraction pipeline
+openai>=1.30.0
+
+# Database (Supabase)
+supabase>=2.0.0
+
+# Web scraping
+playwright>=1.40.0
+beautifulsoup4>=4.12.0
+requests>=2.31.0
+
+# PDF extraction
+PyMuPDF>=1.24.0
+pdfplumber>=0.10.0
+
+# Dashboard
+streamlit>=1.35.0
+plotly>=5.18.0
+pyvis>=0.3.2
+folium>=0.16.0
+streamlit-folium>=0.18.0
+networkx>=3.2.0
+pandas>=2.1.0
+
+# Utilities
+python-dotenv>=1.0.0
+
+# Testing
+pytest>=8.0.0

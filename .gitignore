@@ -1,0 +1,14 @@
+# Environment
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+pytest-cache-files-*/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
