@@ -356,6 +356,34 @@ st.markdown(
             color: #666;
         }}
 
+        /* ── Card-style buttons (sector + company grids) ── */
+        [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] > [data-testid="stButton"] > button {{
+            background: white !important;
+            border: 1px solid #E8ECF0 !important;
+            border-radius: 14px !important;
+            padding: 1.2rem 1.4rem !important;
+            text-align: left !important;
+            font-size: 0.88rem !important;
+            color: #555 !important;
+            line-height: 1.6 !important;
+            min-height: 100px !important;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04) !important;
+            transition: box-shadow 0.2s ease, transform 0.15s ease !important;
+            white-space: pre-wrap !important;
+        }}
+        [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] > [data-testid="stButton"] > button:hover {{
+            box-shadow: 0 4px 16px rgba(0,0,0,0.09) !important;
+            transform: translateY(-2px) !important;
+            border-color: {TEAL} !important;
+        }}
+        [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] > [data-testid="stButton"] > button p {{
+            text-align: left !important;
+        }}
+        [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] > [data-testid="stButton"] > button strong {{
+            color: {NAVY} !important;
+            font-size: 0.95rem !important;
+        }}
+
         .profile-card {{
             background: white;
             border-radius: 14px;
@@ -467,16 +495,16 @@ with st.sidebar:
     st.markdown("### Filters")
 
     all_sectors = sorted(df_companies["sector_name"].dropna().unique().tolist())
-    selected_sectors = st.multiselect("Sector", options=all_sectors, default=all_sectors)
+    selected_sectors = st.multiselect("Sector", options=all_sectors, default=[], placeholder="All sectors")
 
     all_cities = sorted(df_companies["headquarters_city"].dropna().unique().tolist())
-    selected_cities = st.multiselect("City", options=all_cities, default=all_cities)
+    selected_cities = st.multiselect("City", options=all_cities, default=[], placeholder="All cities")
 
     all_ownership = sorted(df_companies["ownership_type"].dropna().unique().tolist())
-    selected_ownership = st.multiselect("Ownership Type", options=all_ownership, default=all_ownership)
+    selected_ownership = st.multiselect("Ownership Type", options=all_ownership, default=[], placeholder="All types")
 
     all_tiers = sorted(df_companies["tier_level"].dropna().unique().tolist())
-    selected_tiers = st.multiselect("Tier Level", options=all_tiers, default=all_tiers)
+    selected_tiers = st.multiselect("Tier Level", options=all_tiers, default=[], placeholder="All tiers")
 
     st.markdown("---")
     search_query = st.text_input("🔍 Search companies", placeholder="e.g. Renault, Yazaki...")
@@ -496,16 +524,16 @@ with st.sidebar:
 # ── Apply filters ────────────────────────────────────────
 mask = pd.Series(True, index=df_companies.index)
 
-if selected_sectors and len(selected_sectors) < len(all_sectors):
+if selected_sectors:
     mask = mask & (df_companies["sector_name"].isin(selected_sectors) | df_companies["sector_name"].isna())
 
-if selected_cities and len(selected_cities) < len(all_cities):
+if selected_cities:
     mask = mask & (df_companies["headquarters_city"].isin(selected_cities) | df_companies["headquarters_city"].isna())
 
-if selected_ownership and len(selected_ownership) < len(all_ownership):
+if selected_ownership:
     mask = mask & (df_companies["ownership_type"].isin(selected_ownership) | df_companies["ownership_type"].isna())
 
-if selected_tiers and len(selected_tiers) < len(all_tiers):
+if selected_tiers:
     mask = mask & (df_companies["tier_level"].isin(selected_tiers) | df_companies["tier_level"].isna())
 
 if search_query:
@@ -921,19 +949,9 @@ with tab_sectors:
                     inv_str = f"{inv:,.0f} MAD"
 
             with cols[idx % 3]:
-                st.markdown(
-                    f"""
-                    <div class="sector-card" style="border-left-color: {color};">
-                        <h3>{sector_name}</h3>
-                        <div class="stat"><b>{int(row['company_count'])}</b> companies</div>
-                        <div class="stat"><b>{emp:,.0f}</b> employees</div>
-                        {'<div class="stat"><b>' + inv_str + '</b> invested</div>' if inv_str else ''}
-                        <div class="stat"><b>{int(row['cities'])}</b> cities</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                if st.button(f"View {sector_name}", key=f"sector_btn_{idx}", use_container_width=True):
+                inv_line = f"**{inv_str}** invested  \n" if inv_str else ""
+                card_label = f"**{sector_name}**  \n{int(row['company_count'])} companies · {emp:,.0f} employees  \n{inv_line}{int(row['cities'])} cities"
+                if st.button(card_label, key=f"sector_btn_{idx}", use_container_width=True):
                     show_sector_dialog(sector_name)
 
         st.markdown("---")
@@ -1042,17 +1060,8 @@ with tab_directory:
                 emp_str = "—"
 
             with cols[idx % 3]:
-                st.markdown(
-                    f"""
-                    <div class="sector-card" style="border-left-color: {color}; cursor:pointer;">
-                        <h3 style="font-size:0.95rem;">{co['company_name']}</h3>
-                        <div class="stat" style="margin-bottom:0.2rem;">{sector}</div>
-                        <div class="stat">{city if city else '—'}  &middot;  {emp_str} employees</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                if st.button("View profile", key=f"co_btn_{start}_{idx}", use_container_width=True):
+                card_label = f"**{co['company_name']}**  \n{sector}  \n{city if city else '—'} · {emp_str} employees"
+                if st.button(card_label, key=f"co_btn_{start}_{idx}", use_container_width=True):
                     show_company_dialog(co["company_name"])
     else:
         st.info("No data matches the current filters.")
