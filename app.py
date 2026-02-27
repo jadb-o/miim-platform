@@ -609,41 +609,41 @@ def _render_company_profile(co, co_id):
     has_website = bool(website and pd.notna(website))
 
     # Build logo URL from company website domain
-    logo_html = ""
+    logo_url = ""
     if has_website:
         try:
             from urllib.parse import urlparse
             domain = urlparse(str(website)).netloc or str(website).replace("https://", "").replace("http://", "").split("/")[0]
-            logo_html = f'<img src="https://logo.clearbit.com/{domain}" alt="" style="height:48px; width:48px; border-radius:8px; object-fit:contain; background:white; border:1px solid #E8ECF0; margin-right:1rem;" onerror="this.style.display=\'none\'">'
+            logo_url = f"https://logo.clearbit.com/{domain}"
         except Exception:
-            logo_html = ""
+            logo_url = ""
 
-    website_html = ""
+    # Company header — use Streamlit columns for logo + info + website button
+    if logo_url:
+        hdr_left, hdr_right = st.columns([1, 11])
+        with hdr_left:
+            st.image(logo_url, width=48)
+        with hdr_right:
+            st.markdown(f"### {company_name}")
+            badges = f"`{sector_icon} {sector}`"
+            if city:
+                badges += f"  `📍 {city}`"
+            ownership = co.get("ownership_type", "")
+            if ownership and pd.notna(ownership):
+                badges += f"  `🏛️ {ownership}`"
+            st.markdown(badges)
+    else:
+        st.markdown(f"### {company_name}")
+        badges = f"`{sector_icon} {sector}`"
+        if city:
+            badges += f"  `📍 {city}`"
+        ownership = co.get("ownership_type", "")
+        if ownership and pd.notna(ownership):
+            badges += f"  `🏛️ {ownership}`"
+        st.markdown(badges)
+
     if has_website:
-        website_html = f'<a href="{website}" target="_blank" style="display:inline-flex; align-items:center; gap:0.4rem; background:{TEAL}; color:white; padding:0.4rem 1rem; border-radius:8px; text-decoration:none; font-size:0.85rem; font-weight:500;">🌐 Visit Website</a>'
-
-    st.markdown(
-        f"""
-        <div class="profile-card">
-            <div class="profile-header" style="align-items:flex-start;">
-                <div style="display:flex; align-items:center;">
-                    {logo_html}
-                    <div>
-                        <h2 style="margin:0; color:{NAVY};">{company_name}</h2>
-                        <span class="profile-badge" style="background:{color}; margin-top:0.4rem; display:inline-block;">{sector_icon} {sector}</span>
-                    </div>
-                </div>
-                {website_html}
-            </div>
-            <div style="display:flex; gap:2rem; flex-wrap:wrap; color:#555; margin-top:0.8rem;">
-                {'<span>📍 ' + str(city) + '</span>' if city else ''}
-                {'<span>🏛️ ' + str(co.get("ownership_type", "")) + '</span>' if co.get("ownership_type") else ''}
-                {'<span style="color:#888;">🌐 ' + str(website) + '</span>' if has_website else ''}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        st.link_button("🌐 Visit Website", str(website))
 
     m1, m2, m3, m4 = st.columns(4)
     with m1:
