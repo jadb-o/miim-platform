@@ -263,7 +263,7 @@ class DatabaseWriter:
                 "article_id": article_id,
                 "extraction_data": extraction_data,
                 "model_used": "gpt-4o",
-                "prompt_version": "v1",
+                "prompt_version": 1,
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
                 "confidence_score": confidence,
