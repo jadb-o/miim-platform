@@ -539,36 +539,371 @@ with col5:
 #  TAB LAYOUT
 # ══════════════════════════════════════════════════════════
 
-tab_sectors, tab_directory, tab_profile, tab_network, tab_map, tab_events, tab_review = st.tabs(
-    ["Sectors", "Directory", "Company Profile", "Network Map", "Map", "Events", "Review Queue"]
+# ── Helper: build sector stats ──────────────────────────
+def _build_sector_stats(df):
+    agg_dict = {
+        "company_count": ("company_name", "count"),
+        "total_employees": ("employee_count", lambda x: x.astype(float).sum()),
+        "cities": ("headquarters_city", lambda x: x.dropna().nunique()),
+    }
+    if "investment_amount_mad" in df.columns:
+        agg_dict["total_investment"] = ("investment_amount_mad", lambda x: x.astype(float).sum())
+    stats = df.groupby("sector_name").agg(**agg_dict).reset_index().sort_values("company_count", ascending=False)
+    if "total_investment" not in stats.columns:
+        stats["total_investment"] = 0
+    return stats
+
+
+# ── Helper: render company profile ───────────────────────
+def _render_company_profile(co, co_id):
+    """Render a full company profile inside any container."""
+    sector = co.get("sector_name", "Unknown")
+    city = co.get("headquarters_city", "")
+    color = SECTOR_COLORS.get(sector, TEAL)
+    company_name = co.get("company_name", "")
+
+    st.markdown(
+        f"""
+        <div class="profile-card">
+            <div class="profile-header">
+                <h2>{company_name}</h2>
+                <span class="profile-badge" style="background:{color};">{sector}</span>
+            </div>
+            <div style="display:flex; gap:2rem; flex-wrap:wrap; color:#555;">
+                {'<span>&#x1f4cd; ' + str(city) + '</span>' if city else ''}
+                {'<span>' + str(co.get("ownership_type", "")) + '</span>' if co.get("ownership_type") else ''}
+                {'<span><a href="' + str(co.get("website_url", "")) + '" target="_blank">' + str(co.get("website_url", "")) + '</a></span>' if co.get("website_url") else ''}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        emp = co.get("employee_count")
+        st.metric("Employees", f"{float(emp):,.0f}" if emp and pd.notna(emp) else "N/A")
+    with m2:
+        rev = co.get("revenue_mad")
+        if rev and pd.notna(rev):
+            rev_f = float(rev)
+            rev_str = f"{rev_f/1e6:.0f}M MAD" if rev_f >= 1e6 else f"{rev_f:,.0f} MAD"
+        else:
+            rev_str = "N/A"
+        st.metric("Revenue", rev_str)
+    with m3:
+        inv = co.get("investment_amount_mad")
+        if inv and pd.notna(inv):
+            inv_f = float(inv)
+            inv_str = f"{inv_f/1e6:.0f}M MAD" if inv_f >= 1e6 else f"{inv_f:,.0f} MAD"
+        else:
+            inv_str = "N/A"
+        st.metric("Investment", inv_str)
+    with m4:
+        cap = co.get("capital_mad")
+        if cap and pd.notna(cap):
+            cap_f = float(cap)
+            cap_str = f"{cap_f/1e6:.0f}M MAD" if cap_f >= 1e6 else f"{cap_f:,.0f} MAD"
+        else:
+            cap_str = "N/A"
+        st.metric("Capital", cap_str)
+
+    col_l, col_r = st.columns(2)
+    with col_l:
+        desc = co.get("description")
+        if desc and pd.notna(desc):
+            st.markdown("**Description**")
+            st.write(desc)
+        activities = co.get("activities")
+        if activities and pd.notna(activities):
+            st.markdown("**Activities**")
+            st.write(activities)
+    with col_r:
+        parent = co.get("parent_company")
+        if parent and pd.notna(parent):
+            st.markdown(f"**Parent Company**: {parent}")
+        sub = co.get("sub_sector")
+        if sub and pd.notna(sub):
+            st.markdown(f"**Sub-sector**: {sub}")
+        tier = co.get("tier_level")
+        if tier and pd.notna(tier):
+            st.markdown(f"**Tier Level**: {tier}")
+
+    if not df_people.empty and co_id:
+        co_people = df_people[df_people["company_id"] == co_id]
+        if not co_people.empty:
+            st.markdown("---")
+            st.markdown("**Management Team**")
+            for _, p in co_people.iterrows():
+                role = p.get("role_title", "")
+                name = p.get("person_name", "")
+                st.markdown(f"- **{name}** — {role}")
+
+    if not df_relationships.empty and co_id:
+        co_rels_out = df_relationships[df_relationships["source_company_id"] == co_id] if "source_company_id" in df_relationships.columns else pd.DataFrame()
+        co_rels_in = df_relationships[df_relationships["target_company_id"] == co_id] if "target_company_id" in df_relationships.columns else pd.DataFrame()
+        all_rels = []
+        for _, r in co_rels_out.iterrows():
+            all_rels.append({"Company": r.get("target_name", "?"), "Type": r.get("relationship_type", ""), "Description": r.get("description", ""), "Direction": "outgoing"})
+        for _, r in co_rels_in.iterrows():
+            all_rels.append({"Company": r.get("source_name", "?"), "Type": r.get("relationship_type", ""), "Description": r.get("description", ""), "Direction": "incoming"})
+        if all_rels:
+            st.markdown("---")
+            st.markdown("**Relationships**")
+            st.dataframe(pd.DataFrame(all_rels), use_container_width=True, hide_index=True)
+
+    if not df_articles.empty and co_id:
+        co_arts = df_articles[df_articles["company_id"] == co_id]
+        if not co_arts.empty:
+            st.markdown("---")
+            st.markdown("**Media Mentions**")
+            for _, a in co_arts.head(10).iterrows():
+                title = a.get("article_title", "Article")
+                url = a.get("article_url", "")
+                source = a.get("article_source", "")
+                date = str(a.get("article_date", ""))[:10]
+                mention = a.get("mention_type", "")
+                if url:
+                    st.markdown(f"- [{title}]({url}) — {source} ({date}) *[{mention}]*")
+                else:
+                    st.markdown(f"- {title} — {source} ({date}) *[{mention}]*")
+
+    # Mini network for this company
+    if not df_relationships.empty and co_id:
+        co_rels_out = df_relationships[df_relationships["source_company_id"] == co_id] if "source_company_id" in df_relationships.columns else pd.DataFrame()
+        co_rels_in = df_relationships[df_relationships["target_company_id"] == co_id] if "target_company_id" in df_relationships.columns else pd.DataFrame()
+        mini_nodes = {}
+        mini_edges = []
+
+        # Center node
+        mini_nodes[company_name] = {
+            "id": company_name, "label": company_name,
+            "color": color, "size": 30,
+            "title": f"<b>{company_name}</b>",
+            "font": {"size": 14, "bold": True},
+        }
+
+        for _, r in co_rels_out.iterrows():
+            tgt = r.get("target_name", "")
+            if tgt and tgt not in mini_nodes:
+                mini_nodes[tgt] = {"id": tgt, "label": tgt, "color": "#B0C4D8", "size": 18, "title": f"<b>{tgt}</b>"}
+            if tgt:
+                mini_edges.append({"from": company_name, "to": tgt, "label": r.get("relationship_type", ""), "color": {"color": RELATIONSHIP_COLORS.get(r.get("relationship_type", ""), "#B0C4D8")}, "width": 2})
+
+        for _, r in co_rels_in.iterrows():
+            src = r.get("source_name", "")
+            if src and src not in mini_nodes:
+                mini_nodes[src] = {"id": src, "label": src, "color": "#B0C4D8", "size": 18, "title": f"<b>{src}</b>"}
+            if src:
+                mini_edges.append({"from": src, "to": company_name, "label": r.get("relationship_type", ""), "color": {"color": RELATIONSHIP_COLORS.get(r.get("relationship_type", ""), "#B0C4D8")}, "width": 2})
+
+        if mini_edges:
+            st.markdown("---")
+            st.markdown("**Network**")
+            mini_nodes_json = json.dumps(list(mini_nodes.values()))
+            mini_edges_json = json.dumps(mini_edges)
+            mini_html = f"""
+            <div id="mini-net" style="width:100%;height:350px;border:1px solid #E8ECF0;border-radius:14px;"></div>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.6/vis-network.min.js"></script>
+            <script>
+                var nodes = new vis.DataSet({mini_nodes_json});
+                var edges = new vis.DataSet({mini_edges_json});
+                var container = document.getElementById('mini-net');
+                var network = new vis.Network(container, {{nodes:nodes,edges:edges}}, {{
+                    physics:{{forceAtlas2Based:{{gravitationalConstant:-30,springLength:120}},solver:'forceAtlas2Based',stabilization:{{iterations:100}}}},
+                    nodes:{{shape:'dot',font:{{size:11,color:'{NAVY}',face:'Arial'}},borderWidth:2}},
+                    edges:{{smooth:{{type:'continuous'}},font:{{size:9,color:'#888'}},arrows:{{to:{{enabled:true,scaleFactor:0.5}}}}}},
+                    interaction:{{hover:true,tooltipDelay:200}}
+                }});
+            </script>
+            """
+            components.html(mini_html, height=380)
+
+
+# ── Helper: render mini network for a sector ─────────────
+def _render_sector_network(sector_name, sector_companies_df):
+    """Build and render a vis.js network showing only companies in a given sector."""
+    s_nodes = {}
+    s_edges = []
+    company_ids = set()
+
+    for _, co in sector_companies_df.iterrows():
+        name = co["company_name"]
+        emp = 0
+        try:
+            emp = float(co.get("employee_count", 0)) if co.get("employee_count") and pd.notna(co.get("employee_count")) else 0
+        except (TypeError, ValueError):
+            emp = 0
+        size = max(15, min(45, 15 + (emp / 500)))
+        color = SECTOR_COLORS.get(sector_name, TEAL)
+        s_nodes[name] = {
+            "id": name, "label": name, "color": color, "size": size,
+            "title": f"<b>{name}</b><br>Employees: {emp:,.0f}<br>City: {co.get('headquarters_city', '')}",
+        }
+        if co.get("id"):
+            company_ids.add(co["id"])
+
+    if not df_relationships.empty and "source_company_id" in df_relationships.columns:
+        for _, r in df_relationships.iterrows():
+            src_id = r.get("source_company_id")
+            tgt_id = r.get("target_company_id")
+            if src_id in company_ids or tgt_id in company_ids:
+                src = r.get("source_name", "")
+                tgt = r.get("target_name", "")
+                if src and tgt:
+                    for n in [src, tgt]:
+                        if n not in s_nodes:
+                            s_nodes[n] = {"id": n, "label": n, "color": "#CCCCCC", "size": 14, "title": f"<b>{n}</b> (other sector)"}
+                    rel_type = r.get("relationship_type", "partner")
+                    s_edges.append({
+                        "from": src, "to": tgt, "label": rel_type,
+                        "color": {"color": RELATIONSHIP_COLORS.get(rel_type, "#B0C4D8"), "opacity": 0.7}, "width": 2,
+                    })
+
+    if s_edges:
+        s_nodes_json = json.dumps(list(s_nodes.values()))
+        s_edges_json = json.dumps(s_edges)
+        net_html = f"""
+        <div id="sector-net" style="width:100%;height:400px;border:1px solid #E8ECF0;border-radius:14px;"></div>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.6/vis-network.min.js"></script>
+        <script>
+            var n = new vis.DataSet({s_nodes_json});
+            var e = new vis.DataSet({s_edges_json});
+            var c = document.getElementById('sector-net');
+            new vis.Network(c,{{nodes:n,edges:e}},{{
+                physics:{{forceAtlas2Based:{{gravitationalConstant:-35,springLength:130}},solver:'forceAtlas2Based',stabilization:{{iterations:120}}}},
+                nodes:{{shape:'dot',font:{{size:11,color:'{NAVY}',face:'Arial'}},borderWidth:2}},
+                edges:{{smooth:{{type:'continuous'}},font:{{size:9,color:'#888'}},arrows:{{to:{{enabled:true,scaleFactor:0.5}}}}}},
+                interaction:{{hover:true,tooltipDelay:200}}
+            }});
+        </script>
+        """
+        components.html(net_html, height=430)
+    elif len(s_nodes) > 0:
+        st.caption("No inter-company relationships found for this sector yet.")
+
+
+# ── Dialogs ──────────────────────────────────────────────
+
+@st.dialog("Sector Details", width="large")
+def show_sector_dialog(sector_name):
+    """Full-screen dialog showing sector details when a sector card is clicked."""
+    color = SECTOR_COLORS.get(sector_name, TEAL)
+    sector_df = df_filtered[df_filtered["sector_name"] == sector_name]
+
+    if sector_df.empty:
+        st.warning("No companies found in this sector.")
+        return
+
+    # Header
+    total_emp = sector_df["employee_count"].astype(float).sum()
+    n_companies = len(sector_df)
+    n_cities = sector_df["headquarters_city"].dropna().nunique()
+
+    st.markdown(
+        f"""
+        <div class="profile-card" style="border-left: 5px solid {color};">
+            <h2 style="color:{NAVY}; margin:0;">{sector_name}</h2>
+            <div style="display:flex; gap:2rem; margin-top:0.8rem; flex-wrap:wrap; color:#555;">
+                <span><b>{n_companies}</b> companies</span>
+                <span><b>{total_emp:,.0f}</b> total employees</span>
+                <span><b>{n_cities}</b> cities</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # KPI metrics
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.metric("Companies", n_companies)
+    with m2:
+        st.metric("Total Employees", f"{total_emp:,.0f}")
+    with m3:
+        avg_emp = total_emp / n_companies if n_companies > 0 else 0
+        st.metric("Avg Employees", f"{avg_emp:,.0f}")
+
+    # Biggest players table
+    st.markdown("##### Biggest Players")
+    top_companies = sector_df.sort_values("employee_count", ascending=False).head(15)
+    top_display = top_companies[["company_name", "headquarters_city", "ownership_type", "employee_count", "parent_company"]].copy()
+    top_display.columns = ["Company", "City", "Ownership", "Employees", "Parent"]
+    top_display["Employees"] = top_display["Employees"].astype(float).map(lambda x: f"{x:,.0f}" if pd.notna(x) else "—")
+    st.dataframe(top_display, use_container_width=True, hide_index=True)
+
+    # City breakdown
+    col_chart, col_ownership = st.columns(2)
+    with col_chart:
+        st.markdown("##### Companies by City")
+        city_counts = sector_df["headquarters_city"].fillna("Unknown").value_counts().reset_index()
+        city_counts.columns = ["City", "Count"]
+        if not city_counts.empty:
+            fig_city = px.bar(
+                city_counts.head(10), x="Count", y="City", orientation="h",
+                text="Count", color_discrete_sequence=[color],
+            )
+            fig_city.update_traces(textposition="outside")
+            fig_city.update_layout(
+                showlegend=False, plot_bgcolor="white", paper_bgcolor="white",
+                margin=dict(l=10, r=50, t=10, b=30), height=280,
+                font=dict(family="Arial", color=NAVY),
+            )
+            st.plotly_chart(fig_city, use_container_width=True)
+
+    with col_ownership:
+        st.markdown("##### Ownership Breakdown")
+        own_counts = sector_df["ownership_type"].fillna("Unknown").value_counts().reset_index()
+        own_counts.columns = ["Ownership", "Count"]
+        if not own_counts.empty:
+            fig_own = px.pie(
+                own_counts, names="Ownership", values="Count", hole=0.4,
+                color_discrete_sequence=[color, NAVY, SAND, CORAL, GOLD, "#AAAAAA"],
+            )
+            fig_own.update_layout(
+                margin=dict(l=10, r=10, t=10, b=10), height=280,
+                font=dict(family="Arial", color=NAVY), paper_bgcolor="white",
+            )
+            fig_own.update_traces(textinfo="label+percent", textposition="outside")
+            st.plotly_chart(fig_own, use_container_width=True)
+
+    # Sector network map
+    st.markdown("##### Sector Network Map")
+    _render_sector_network(sector_name, sector_df)
+
+
+@st.dialog("Company Profile", width="large")
+def show_company_dialog(company_name):
+    """Full-screen dialog showing company details when a company is clicked."""
+    co_match = df_filtered[df_filtered["company_name"] == company_name]
+    if co_match.empty:
+        co_match = df_companies[df_companies["company_name"] == company_name]
+    if co_match.empty:
+        st.warning(f"Company '{company_name}' not found.")
+        return
+    co = co_match.iloc[0]
+    co_id = co.get("id")
+    _render_company_profile(co, co_id)
+
+
+# ══════════════════════════════════════════════════════════
+#  TAB LAYOUT
+# ══════════════════════════════════════════════════════════
+
+tab_sectors, tab_directory, tab_network, tab_map, tab_events, tab_review = st.tabs(
+    ["Sectors", "Directory", "Network Map", "Map", "Events", "Review Queue"]
 )
 
 
 # ─── TAB 1: Sectors Overview ─────────────────────────────
 with tab_sectors:
     st.markdown("#### Sector Overview")
-    st.caption("Morocco's priority industrial sectors and their key statistics.")
+    st.caption("Click any sector card to see the full breakdown — biggest players, network map, and more.")
 
     if not df_filtered.empty:
-        # Build aggregation dict based on available columns
-        agg_dict = {
-            "company_count": ("company_name", "count"),
-            "total_employees": ("employee_count", lambda x: x.astype(float).sum()),
-            "cities": ("headquarters_city", lambda x: x.dropna().nunique()),
-        }
-        if "investment_amount_mad" in df_filtered.columns:
-            agg_dict["total_investment"] = ("investment_amount_mad", lambda x: x.astype(float).sum())
+        sector_stats = _build_sector_stats(df_filtered)
 
-        sector_stats = (
-            df_filtered.groupby("sector_name")
-            .agg(**agg_dict)
-            .reset_index()
-            .sort_values("company_count", ascending=False)
-        )
-        if "total_investment" not in sector_stats.columns:
-            sector_stats["total_investment"] = 0
-
-        # Grid of sector cards
+        # Grid of clickable sector cards
         cols = st.columns(3)
         for idx, (_, row) in enumerate(sector_stats.iterrows()):
             sector_name = row["sector_name"]
@@ -590,14 +925,16 @@ with tab_sectors:
                     f"""
                     <div class="sector-card" style="border-left-color: {color};">
                         <h3>{sector_name}</h3>
-                        <div class="stat">🏢 <b>{int(row['company_count'])}</b> companies</div>
-                        <div class="stat">👥 <b>{emp:,.0f}</b> employees</div>
-                        {'<div class="stat">💰 <b>' + inv_str + '</b> invested</div>' if inv_str else ''}
-                        <div class="stat">📍 <b>{int(row['cities'])}</b> cities</div>
+                        <div class="stat"><b>{int(row['company_count'])}</b> companies</div>
+                        <div class="stat"><b>{emp:,.0f}</b> employees</div>
+                        {'<div class="stat"><b>' + inv_str + '</b> invested</div>' if inv_str else ''}
+                        <div class="stat"><b>{int(row['cities'])}</b> cities</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
+                if st.button(f"View {sector_name}", key=f"sector_btn_{idx}", use_container_width=True):
+                    show_sector_dialog(sector_name)
 
         st.markdown("---")
 
@@ -677,167 +1014,48 @@ with tab_sectors:
 # ─── TAB 2: Company Directory ────────────────────────────
 with tab_directory:
     st.markdown(f"#### Company Directory ({len(df_filtered)} results)")
-    st.caption("Select a company in the 'Company Profile' tab for full details.")
+    st.caption("Click any company to view its full profile with relationships, management, media mentions, and network map.")
 
-    display_cols = {
-        "company_name": "Company",
-        "sector_name": "Sector",
-        "sub_sector": "Sub-Sector",
-        "headquarters_city": "City",
-        "ownership_type": "Ownership",
-        "employee_count": "Employees",
-        "description": "Description",
-        "parent_company": "Parent",
-        "website_url": "Website",
-    }
+    if not df_filtered.empty:
+        # Company cards in a grid — clickable
+        company_list = df_filtered.sort_values("company_name")
+        page_size = 24
+        total_pages = max(1, (len(company_list) + page_size - 1) // page_size)
+        page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1, label_visibility="collapsed") if total_pages > 1 else 1
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_df = company_list.iloc[start:end]
 
-    df_display = df_filtered[[c for c in display_cols.keys() if c in df_filtered.columns]].copy()
-    df_display.rename(columns=display_cols, inplace=True)
+        if total_pages > 1:
+            st.caption(f"Showing {start + 1}–{min(end, len(company_list))} of {len(company_list)} companies  |  Page {page} of {total_pages}")
 
-    if "Employees" in df_display.columns:
-        df_display["Employees"] = (
-            df_display["Employees"].astype(float).map(lambda x: f"{x:,.0f}" if pd.notna(x) else "—")
-        )
-    if "Description" in df_display.columns:
-        df_display["Description"] = df_display["Description"].fillna("").str[:80]
-
-    st.dataframe(
-        df_display, use_container_width=True, hide_index=True,
-        height=min(500, 50 + len(df_display) * 35),
-    )
-
-
-# ─── TAB 3: Company Profile ──────────────────────────────
-with tab_profile:
-    st.markdown("#### Company Profile")
-
-    company_names = sorted(df_filtered["company_name"].dropna().unique().tolist())
-    selected_company = st.selectbox("Select a company", options=[""] + company_names, index=0)
-
-    if selected_company:
-        co = df_filtered[df_filtered["company_name"] == selected_company].iloc[0]
-        co_id = co.get("id")
-
-        # Header
-        sector = co.get("sector_name", "Unknown")
-        city = co.get("headquarters_city", "")
-        color = SECTOR_COLORS.get(sector, TEAL)
-
-        st.markdown(
-            f"""
-            <div class="profile-card">
-                <div class="profile-header">
-                    <h2>{selected_company}</h2>
-                    <span class="profile-badge" style="background:{color};">{sector}</span>
-                </div>
-                <div style="display:flex; gap:2rem; flex-wrap:wrap; color:#555;">
-                    {'<span>📍 ' + str(city) + '</span>' if city else ''}
-                    {'<span>🏢 ' + str(co.get("ownership_type", "")) + '</span>' if co.get("ownership_type") else ''}
-                    {'<span>🔗 <a href="' + str(co.get("website_url", "")) + '" target="_blank">' + str(co.get("website_url", "")) + '</a></span>' if co.get("website_url") else ''}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        # Key metrics
-        m1, m2, m3, m4 = st.columns(4)
-        with m1:
+        cols = st.columns(3)
+        for idx, (_, co) in enumerate(page_df.iterrows()):
+            sector = co.get("sector_name", "Unknown")
+            city = co.get("headquarters_city", "")
+            color = SECTOR_COLORS.get(sector, "#AAAAAA")
             emp = co.get("employee_count")
-            st.metric("Employees", f"{float(emp):,.0f}" if emp and pd.notna(emp) else "N/A")
-        with m2:
-            rev = co.get("revenue_mad")
-            if rev and pd.notna(rev):
-                rev_f = float(rev)
-                rev_str = f"{rev_f/1e6:.0f}M MAD" if rev_f >= 1e6 else f"{rev_f:,.0f} MAD"
-            else:
-                rev_str = "N/A"
-            st.metric("Revenue", rev_str)
-        with m3:
-            inv = co.get("investment_amount_mad")
-            if inv and pd.notna(inv):
-                inv_f = float(inv)
-                inv_str = f"{inv_f/1e6:.0f}M MAD" if inv_f >= 1e6 else f"{inv_f:,.0f} MAD"
-            else:
-                inv_str = "N/A"
-            st.metric("Investment", inv_str)
-        with m4:
-            cap = co.get("capital_mad")
-            if cap and pd.notna(cap):
-                cap_f = float(cap)
-                cap_str = f"{cap_f/1e6:.0f}M MAD" if cap_f >= 1e6 else f"{cap_f:,.0f} MAD"
-            else:
-                cap_str = "N/A"
-            st.metric("Capital", cap_str)
+            try:
+                emp_val = float(emp) if emp and pd.notna(emp) else 0
+                emp_str = f"{emp_val:,.0f}" if emp_val > 0 else "—"
+            except (TypeError, ValueError):
+                emp_str = "—"
 
-        # Description & activities
-        col_l, col_r = st.columns(2)
-        with col_l:
-            desc = co.get("description")
-            if desc and pd.notna(desc):
-                st.markdown("**Description**")
-                st.write(desc)
-            activities = co.get("activities")
-            if activities and pd.notna(activities):
-                st.markdown("**Activities**")
-                st.write(activities)
-
-        with col_r:
-            parent = co.get("parent_company")
-            if parent and pd.notna(parent):
-                st.markdown(f"**Parent Company**: {parent}")
-            sub = co.get("sub_sector")
-            if sub and pd.notna(sub):
-                st.markdown(f"**Sub-sector**: {sub}")
-            tier = co.get("tier_level")
-            if tier and pd.notna(tier):
-                st.markdown(f"**Tier Level**: {tier}")
-
-        # Management team
-        if not df_people.empty and co_id:
-            co_people = df_people[df_people["company_id"] == co_id]
-            if not co_people.empty:
-                st.markdown("---")
-                st.markdown("**👥 Management Team**")
-                for _, p in co_people.iterrows():
-                    role = p.get("role_title", "")
-                    name = p.get("person_name", "")
-                    st.markdown(f"- **{name}** — {role}")
-
-        # Relationships
-        if not df_relationships.empty and co_id:
-            co_rels_out = df_relationships[df_relationships["source_company_id"] == co_id] if "source_company_id" in df_relationships.columns else pd.DataFrame()
-            co_rels_in = df_relationships[df_relationships["target_company_id"] == co_id] if "target_company_id" in df_relationships.columns else pd.DataFrame()
-
-            all_rels = []
-            for _, r in co_rels_out.iterrows():
-                all_rels.append({"Company": r.get("target_name", "?"), "Type": r.get("relationship_type", ""), "Description": r.get("description", ""), "Direction": "→"})
-            for _, r in co_rels_in.iterrows():
-                all_rels.append({"Company": r.get("source_name", "?"), "Type": r.get("relationship_type", ""), "Description": r.get("description", ""), "Direction": "←"})
-
-            if all_rels:
-                st.markdown("---")
-                st.markdown("**🔗 Relationships**")
-                st.dataframe(pd.DataFrame(all_rels), use_container_width=True, hide_index=True)
-
-        # Recent articles
-        if not df_articles.empty and co_id:
-            co_arts = df_articles[df_articles["company_id"] == co_id]
-            if not co_arts.empty:
-                st.markdown("---")
-                st.markdown("**📰 Media Mentions**")
-                for _, a in co_arts.head(10).iterrows():
-                    title = a.get("article_title", "Article")
-                    url = a.get("article_url", "")
-                    source = a.get("article_source", "")
-                    date = str(a.get("article_date", ""))[:10]
-                    mention = a.get("mention_type", "")
-                    if url:
-                        st.markdown(f"- [{title}]({url}) — {source} ({date}) *[{mention}]*")
-                    else:
-                        st.markdown(f"- {title} — {source} ({date}) *[{mention}]*")
+            with cols[idx % 3]:
+                st.markdown(
+                    f"""
+                    <div class="sector-card" style="border-left-color: {color}; cursor:pointer;">
+                        <h3 style="font-size:0.95rem;">{co['company_name']}</h3>
+                        <div class="stat" style="margin-bottom:0.2rem;">{sector}</div>
+                        <div class="stat">{city if city else '—'}  &middot;  {emp_str} employees</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if st.button("View profile", key=f"co_btn_{start}_{idx}", use_container_width=True):
+                    show_company_dialog(co["company_name"])
     else:
-        st.info("Select a company from the dropdown above to view its full profile.")
+        st.info("No data matches the current filters.")
 
 
 # ─── TAB 4: Interactive Network Map (vis.js) ─────────────
