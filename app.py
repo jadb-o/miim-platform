@@ -281,12 +281,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Session state for deferred dialog opens ──────────────
-if "open_sector_dialog" not in st.session_state:
-    st.session_state.open_sector_dialog = None
-if "open_company_dialog" not in st.session_state:
-    st.session_state.open_company_dialog = None
-
 # ── Custom CSS ───────────────────────────────────────────
 st.markdown(
     f"""
@@ -1037,18 +1031,6 @@ def show_company_dialog(company_name):
     _dialog()
 
 
-# ── Handle deferred dialog opens from chart clicks ───────
-if st.session_state.open_sector_dialog:
-    _sector = st.session_state.open_sector_dialog
-    st.session_state.open_sector_dialog = None
-    show_sector_dialog(_sector)
-
-if st.session_state.open_company_dialog:
-    _company = st.session_state.open_company_dialog
-    st.session_state.open_company_dialog = None
-    show_company_dialog(_company)
-
-
 # ══════════════════════════════════════════════════════════
 #  TAB LAYOUT
 # ══════════════════════════════════════════════════════════
@@ -1111,12 +1093,7 @@ with tab_sectors:
                 margin=dict(l=20, r=80, t=20, b=40), height=350,
                 font=dict(family="Arial", color=NAVY),
             )
-            event_bar = st.plotly_chart(fig_bar, use_container_width=True, on_select="rerun", key="chart_sector_bar")
-            if event_bar and event_bar.selection and event_bar.selection.points:
-                clicked_sector = event_bar.selection.points[0].get("y")
-                if clicked_sector and clicked_sector in all_sectors:
-                    st.session_state.open_sector_dialog = clicked_sector
-                    st.rerun()
+            st.plotly_chart(fig_bar, use_container_width=True)
 
         with col_right:
             st.markdown("##### 🏛️ Companies by Ownership Type")
@@ -1135,18 +1112,7 @@ with tab_sectors:
                     font=dict(family="Arial", color=NAVY), paper_bgcolor="white",
                 )
                 fig_pie.update_traces(textinfo="label+percent", textposition="outside")
-                event_pie = st.plotly_chart(fig_pie, use_container_width=True, on_select="rerun", key="chart_ownership_pie")
-                if event_pie and event_pie.selection and event_pie.selection.points:
-                    clicked_label = event_pie.selection.points[0].get("label")
-                    if clicked_label:
-                        matching = df_filtered[df_filtered["ownership_type"].fillna("Unknown") == clicked_label]
-                        if not matching.empty:
-                            st.markdown(f"**{clicked_label}** — {len(matching)} companies:")
-                            for _, co in matching.head(10).iterrows():
-                                co_name = co["company_name"]
-                                if st.button(f"🏢 {co_name}", key=f"own_{co_name}"):
-                                    st.session_state.open_company_dialog = co_name
-                                    st.rerun()
+                st.plotly_chart(fig_pie, use_container_width=True)
 
         # Sector integration targets
         if "sector_target_pct" in df_filtered.columns:
@@ -1176,12 +1142,7 @@ with tab_sectors:
                     margin=dict(l=20, r=60, t=20, b=40), height=300,
                     font=dict(family="Arial", color=NAVY),
                 )
-                event_target = st.plotly_chart(fig_target, use_container_width=True, on_select="rerun", key="chart_integration_targets")
-                if event_target and event_target.selection and event_target.selection.points:
-                    clicked_sector = event_target.selection.points[0].get("y")
-                    if clicked_sector and clicked_sector in all_sectors:
-                        st.session_state.open_sector_dialog = clicked_sector
-                        st.rerun()
+                st.plotly_chart(fig_target, use_container_width=True)
 
                 # Source citations for integration targets
                 source_rows = (
