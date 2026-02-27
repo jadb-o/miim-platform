@@ -68,6 +68,20 @@ SECTOR_COLORS = {
     "Other": "#AAAAAA",
 }
 
+SECTOR_ICONS = {
+    "Automotive": "🚗",
+    "Aerospace": "✈️",
+    "Textiles & Leather": "🧵",
+    "Mining & Phosphates": "⛏️",
+    "Fishing & Seafood": "🐟",
+    "Agrifood": "🌾",
+    "Renewable Energy": "⚡",
+    "Electronics": "🔌",
+    "Pharmaceuticals": "💊",
+    "Construction Materials": "🏗️",
+    "Other": "📦",
+}
+
 RELATIONSHIP_COLORS = {
     "partner": "#2A9D8F",
     "client": "#457B9D",
@@ -590,17 +604,18 @@ def _render_company_profile(co, co_id):
     color = SECTOR_COLORS.get(sector, TEAL)
     company_name = co.get("company_name", "")
 
+    sector_icon = SECTOR_ICONS.get(sector, "📦")
     st.markdown(
         f"""
         <div class="profile-card">
             <div class="profile-header">
-                <h2>{company_name}</h2>
-                <span class="profile-badge" style="background:{color};">{sector}</span>
+                <h2>🏢 {company_name}</h2>
+                <span class="profile-badge" style="background:{color};">{sector_icon} {sector}</span>
             </div>
             <div style="display:flex; gap:2rem; flex-wrap:wrap; color:#555;">
-                {'<span>&#x1f4cd; ' + str(city) + '</span>' if city else ''}
-                {'<span>' + str(co.get("ownership_type", "")) + '</span>' if co.get("ownership_type") else ''}
-                {'<span><a href="' + str(co.get("website_url", "")) + '" target="_blank">' + str(co.get("website_url", "")) + '</a></span>' if co.get("website_url") else ''}
+                {'<span>📍 ' + str(city) + '</span>' if city else ''}
+                {'<span>🏛️ ' + str(co.get("ownership_type", "")) + '</span>' if co.get("ownership_type") else ''}
+                {'<span>🌐 <a href="' + str(co.get("website_url", "")) + '" target="_blank">' + str(co.get("website_url", "")) + '</a></span>' if co.get("website_url") else ''}
             </div>
         </div>
         """,
@@ -610,7 +625,7 @@ def _render_company_profile(co, co_id):
     m1, m2, m3, m4 = st.columns(4)
     with m1:
         emp = co.get("employee_count")
-        st.metric("Employees", f"{float(emp):,.0f}" if emp and pd.notna(emp) else "N/A")
+        st.metric("👥 Employees", f"{float(emp):,.0f}" if emp and pd.notna(emp) else "N/A")
     with m2:
         rev = co.get("revenue_mad")
         if rev and pd.notna(rev):
@@ -618,7 +633,7 @@ def _render_company_profile(co, co_id):
             rev_str = f"{rev_f/1e6:.0f}M MAD" if rev_f >= 1e6 else f"{rev_f:,.0f} MAD"
         else:
             rev_str = "N/A"
-        st.metric("Revenue", rev_str)
+        st.metric("💰 Revenue", rev_str)
     with m3:
         inv = co.get("investment_amount_mad")
         if inv and pd.notna(inv):
@@ -626,7 +641,7 @@ def _render_company_profile(co, co_id):
             inv_str = f"{inv_f/1e6:.0f}M MAD" if inv_f >= 1e6 else f"{inv_f:,.0f} MAD"
         else:
             inv_str = "N/A"
-        st.metric("Investment", inv_str)
+        st.metric("📈 Investment", inv_str)
     with m4:
         cap = co.get("capital_mad")
         if cap and pd.notna(cap):
@@ -634,34 +649,34 @@ def _render_company_profile(co, co_id):
             cap_str = f"{cap_f/1e6:.0f}M MAD" if cap_f >= 1e6 else f"{cap_f:,.0f} MAD"
         else:
             cap_str = "N/A"
-        st.metric("Capital", cap_str)
+        st.metric("🏦 Capital", cap_str)
 
     col_l, col_r = st.columns(2)
     with col_l:
         desc = co.get("description")
         if desc and pd.notna(desc):
-            st.markdown("**Description**")
+            st.markdown("**📝 Description**")
             st.write(desc)
         activities = co.get("activities")
         if activities and pd.notna(activities):
-            st.markdown("**Activities**")
+            st.markdown("**⚙️ Activities**")
             st.write(activities)
     with col_r:
         parent = co.get("parent_company")
         if parent and pd.notna(parent):
-            st.markdown(f"**Parent Company**: {parent}")
+            st.markdown(f"**🏛️ Parent Company**: {parent}")
         sub = co.get("sub_sector")
         if sub and pd.notna(sub):
-            st.markdown(f"**Sub-sector**: {sub}")
+            st.markdown(f"**🔖 Sub-sector**: {sub}")
         tier = co.get("tier_level")
         if tier and pd.notna(tier):
-            st.markdown(f"**Tier Level**: {tier}")
+            st.markdown(f"**🎯 Tier Level**: {tier}")
 
     if not df_people.empty and co_id:
         co_people = df_people[df_people["company_id"] == co_id]
         if not co_people.empty:
             st.markdown("---")
-            st.markdown("**Management Team**")
+            st.markdown("**👔 Management Team**")
             for _, p in co_people.iterrows():
                 role = p.get("role_title", "")
                 name = p.get("person_name", "")
@@ -677,14 +692,14 @@ def _render_company_profile(co, co_id):
             all_rels.append({"Company": r.get("source_name", "?"), "Type": r.get("relationship_type", ""), "Description": r.get("description", ""), "Direction": "incoming"})
         if all_rels:
             st.markdown("---")
-            st.markdown("**Relationships**")
+            st.markdown("**🔗 Relationships**")
             st.dataframe(pd.DataFrame(all_rels), use_container_width=True, hide_index=True)
 
     if not df_articles.empty and co_id:
         co_arts = df_articles[df_articles["company_id"] == co_id]
         if not co_arts.empty:
             st.markdown("---")
-            st.markdown("**Media Mentions**")
+            st.markdown("**📰 Media Mentions**")
             for _, a in co_arts.head(10).iterrows():
                 title = a.get("article_title", "Article")
                 url = a.get("article_url", "")
@@ -824,6 +839,7 @@ def show_sector_dialog(sector_name):
         return
 
     # Header
+    icon = SECTOR_ICONS.get(sector_name, "📦")
     total_emp = sector_df["employee_count"].astype(float).sum()
     n_companies = len(sector_df)
     n_cities = sector_df["headquarters_city"].dropna().nunique()
@@ -831,11 +847,11 @@ def show_sector_dialog(sector_name):
     st.markdown(
         f"""
         <div class="profile-card" style="border-left: 5px solid {color};">
-            <h2 style="color:{NAVY}; margin:0;">{sector_name}</h2>
+            <h2 style="color:{NAVY}; margin:0;">{icon} {sector_name}</h2>
             <div style="display:flex; gap:2rem; margin-top:0.8rem; flex-wrap:wrap; color:#555;">
-                <span><b>{n_companies}</b> companies</span>
-                <span><b>{total_emp:,.0f}</b> total employees</span>
-                <span><b>{n_cities}</b> cities</span>
+                <span>🏢 <b>{n_companies}</b> companies</span>
+                <span>👥 <b>{total_emp:,.0f}</b> total employees</span>
+                <span>📍 <b>{n_cities}</b> cities</span>
             </div>
         </div>
         """,
@@ -845,12 +861,12 @@ def show_sector_dialog(sector_name):
     # KPI metrics
     m1, m2, m3 = st.columns(3)
     with m1:
-        st.metric("Companies", n_companies)
+        st.metric("🏢 Companies", n_companies)
     with m2:
-        st.metric("Total Employees", f"{total_emp:,.0f}")
+        st.metric("👥 Total Employees", f"{total_emp:,.0f}")
     with m3:
         avg_emp = total_emp / n_companies if n_companies > 0 else 0
-        st.metric("Avg Employees", f"{avg_emp:,.0f}")
+        st.metric("📊 Avg Employees", f"{avg_emp:,.0f}")
 
     # Biggest players table
     st.markdown("##### 🏆 Biggest Players")
@@ -949,8 +965,9 @@ with tab_sectors:
                     inv_str = f"{inv:,.0f} MAD"
 
             with cols[idx % 3]:
-                inv_line = f"**{inv_str}** invested  \n" if inv_str else ""
-                card_label = f"**{sector_name}**  \n{int(row['company_count'])} companies · {emp:,.0f} employees  \n{inv_line}{int(row['cities'])} cities"
+                icon = SECTOR_ICONS.get(sector_name, "📦")
+                inv_line = f"💰 **{inv_str}** invested  \n" if inv_str else ""
+                card_label = f"{icon} **{sector_name}**  \n🏢 {int(row['company_count'])} companies · 👥 {emp:,.0f} employees  \n{inv_line}📍 {int(row['cities'])} cities"
                 if st.button(card_label, key=f"sector_btn_{idx}", use_container_width=True):
                     show_sector_dialog(sector_name)
 
@@ -1060,7 +1077,8 @@ with tab_directory:
                 emp_str = "—"
 
             with cols[idx % 3]:
-                card_label = f"**{co['company_name']}**  \n{sector}  \n{city if city else '—'} · {emp_str} employees"
+                sector_icon = SECTOR_ICONS.get(sector, "📦")
+                card_label = f"🏢 **{co['company_name']}**  \n{sector_icon} {sector}  \n📍 {city if city else '—'} · 👥 {emp_str} employees"
                 if st.button(card_label, key=f"co_btn_{start}_{idx}", use_container_width=True):
                     show_company_dialog(co["company_name"])
     else:
