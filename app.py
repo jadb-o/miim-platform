@@ -605,17 +605,40 @@ def _render_company_profile(co, co_id):
     company_name = co.get("company_name", "")
 
     sector_icon = SECTOR_ICONS.get(sector, "📦")
+    website = co.get("website_url", "")
+    has_website = bool(website and pd.notna(website))
+
+    # Build logo URL from company website domain
+    logo_html = ""
+    if has_website:
+        try:
+            from urllib.parse import urlparse
+            domain = urlparse(str(website)).netloc or str(website).replace("https://", "").replace("http://", "").split("/")[0]
+            logo_html = f'<img src="https://logo.clearbit.com/{domain}" alt="" style="height:48px; width:48px; border-radius:8px; object-fit:contain; background:white; border:1px solid #E8ECF0; margin-right:1rem;" onerror="this.style.display=\'none\'">'
+        except Exception:
+            logo_html = ""
+
+    website_html = ""
+    if has_website:
+        website_html = f'<a href="{website}" target="_blank" style="display:inline-flex; align-items:center; gap:0.4rem; background:{TEAL}; color:white; padding:0.4rem 1rem; border-radius:8px; text-decoration:none; font-size:0.85rem; font-weight:500;">🌐 Visit Website</a>'
+
     st.markdown(
         f"""
         <div class="profile-card">
-            <div class="profile-header">
-                <h2>🏢 {company_name}</h2>
-                <span class="profile-badge" style="background:{color};">{sector_icon} {sector}</span>
+            <div class="profile-header" style="align-items:flex-start;">
+                <div style="display:flex; align-items:center;">
+                    {logo_html}
+                    <div>
+                        <h2 style="margin:0; color:{NAVY};">{company_name}</h2>
+                        <span class="profile-badge" style="background:{color}; margin-top:0.4rem; display:inline-block;">{sector_icon} {sector}</span>
+                    </div>
+                </div>
+                {website_html}
             </div>
-            <div style="display:flex; gap:2rem; flex-wrap:wrap; color:#555;">
+            <div style="display:flex; gap:2rem; flex-wrap:wrap; color:#555; margin-top:0.8rem;">
                 {'<span>📍 ' + str(city) + '</span>' if city else ''}
                 {'<span>🏛️ ' + str(co.get("ownership_type", "")) + '</span>' if co.get("ownership_type") else ''}
-                {'<span>🌐 <a href="' + str(co.get("website_url", "")) + '" target="_blank">' + str(co.get("website_url", "")) + '</a></span>' if co.get("website_url") else ''}
+                {'<span style="color:#888;">🌐 ' + str(website) + '</span>' if has_website else ''}
             </div>
         </div>
         """,
@@ -1087,13 +1110,9 @@ with tab_directory:
 
             with cols[idx % 3]:
                 sector_icon = SECTOR_ICONS.get(sector, "📦")
-                website = co.get("website_url", "")
-                website_line = f"  \n🌐 {website}" if website and pd.notna(website) else ""
-                card_label = f"🏢 **{co['company_name']}**  \n{sector_icon} {sector}  \n📍 {city if city else '—'} · 👥 {emp_str} employees{website_line}"
+                card_label = f"🏢 **{co['company_name']}**  \n{sector_icon} {sector}  \n📍 {city if city else '—'} · 👥 {emp_str} employees"
                 if st.button(card_label, key=f"co_btn_{start}_{idx}", use_container_width=True):
                     show_company_dialog(co["company_name"])
-                if website and pd.notna(website):
-                    st.markdown(f'<a href="{website}" target="_blank" style="font-size:0.78rem; color:{TEAL}; text-decoration:none;">🌐 {website}</a>', unsafe_allow_html=True)
     else:
         st.info("No data matches the current filters.")
 
