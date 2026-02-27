@@ -15,7 +15,7 @@ from extraction.extract_company_data import extract_company_data
 from pipeline.database_writer import DatabaseWriter
 from scrapers.leseco_scraper import LesecoScraper
 from scrapers.mcinet_scraper import McinetScraper
-from scrapers.medias24_scraper import Medias24Scraper
+from scrapers.challenge_scraper import ChallengeScraper
 
 # Set up logging
 logging.basicConfig(
@@ -57,7 +57,7 @@ class PipelineOrchestrator:
         }
 
         scrapers = [
-            Medias24Scraper(self.supabase),
+            ChallengeScraper(self.supabase),
             LesecoScraper(self.supabase),
             McinetScraper(self.supabase),
         ]

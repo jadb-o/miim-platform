@@ -1,4 +1,4 @@
-"""Scraper for Leseco news site."""
+"""Scraper for Challenge.ma business news site."""
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -10,14 +10,14 @@ from scrapers.scraper_utils import clean_article_text, parse_french_date
 logger = logging.getLogger(__name__)
 
 
-class LesecoScraper(BaseScraper):
-    """Scraper for https://leseco.ma articles."""
+class ChallengeScraper(BaseScraper):
+    """Scraper for https://www.challenge.ma articles (replaces Medias24 which blocks cloud IPs)."""
 
-    BASE_URL = "https://leseco.ma"
+    BASE_URL = "https://www.challenge.ma"
 
     def __init__(self, supabase_client: Client, rate_limit: float = 2.0):
-        super().__init__("Leseco", supabase_client, rate_limit=rate_limit)
-        self.categories = ["/business", "/maroc"]
+        super().__init__("Challenge", supabase_client, rate_limit=rate_limit)
+        self.categories = ["/category/economie", "/category/entreprises"]
 
     def get_article_urls(self) -> List[str]:
         urls = []
@@ -26,12 +26,15 @@ class LesecoScraper(BaseScraper):
         for category in self.categories:
             for page in range(1, max_pages + 1):
                 try:
-                    category_url = f"{self.BASE_URL}{category}/" if page == 1 else f"{self.BASE_URL}{category}/page/{page}/"
-                    logger.debug(f"Fetching: {category_url}")
+                    if page == 1:
+                        cat_url = f"{self.BASE_URL}{category}/"
+                    else:
+                        cat_url = f"{self.BASE_URL}{category}/page/{page}/"
+                    logger.debug(f"Fetching: {cat_url}")
 
-                    response = self.session.get(category_url)
+                    response = self.session.get(cat_url)
                     if not response:
-                        logger.warning(f"Failed to fetch {category_url}")
+                        logger.warning(f"Failed to fetch {cat_url}")
                         continue
 
                     from bs4 import BeautifulSoup
@@ -39,42 +42,41 @@ class LesecoScraper(BaseScraper):
 
                     found_on_page = 0
 
-                    # LesEco uses article tags with links inside
+                    # Challenge.ma uses article tags
                     articles = soup.find_all("article")
                     if articles:
-                        for article in articles:
-                            link = article.find("a", href=True)
+                        for article_elem in articles:
+                            link = article_elem.find("a", href=True)
                             if link:
                                 href = link["href"]
                                 if not href.startswith("http"):
                                     href = self.BASE_URL + href
-                                # Only collect actual article links (with .html or long paths)
-                                if href not in urls and href != self.BASE_URL + category + "/":
+                                if href not in urls and "challenge.ma" in href:
                                     urls.append(href)
                                     found_on_page += 1
 
-                    # Fallback: find all links that look like articles
+                    # Fallback: look for links with article-like URL patterns
                     if found_on_page == 0:
                         for link in soup.find_all("a", href=True):
                             href = link["href"]
                             if not href.startswith("http"):
                                 href = self.BASE_URL + href
-                            # Article URLs typically end in .html or have long slugs
-                            if (href.endswith(".html") or len(href.split("/")[-1]) > 20) and href not in urls:
-                                if category in href or "/business/" in href or "/maroc/" in href:
-                                    urls.append(href)
-                                    found_on_page += 1
+                            # Challenge.ma articles end with -NNNNNN/
+                            import re
+                            if re.search(r'-\d{4,}/?$', href) and href not in urls:
+                                urls.append(href)
+                                found_on_page += 1
 
-                    logger.info(f"Found {found_on_page} URLs on {category_url}")
+                    logger.info(f"Found {found_on_page} URLs on {cat_url}")
 
                     if found_on_page == 0:
-                        logger.warning(f"No articles found on {category_url}")
+                        logger.warning(f"No articles found on {cat_url}")
 
                 except Exception as e:
                     logger.error(f"Error fetching {category} page {page}: {str(e)}")
                     continue
 
-        logger.info(f"Found {len(urls)} article URLs from Leseco")
+        logger.info(f"Found {len(urls)} article URLs from Challenge")
         return urls[:50]
 
     def scrape_article(self, url: str) -> Optional[Dict[str, Any]]:
@@ -113,29 +115,31 @@ class LesecoScraper(BaseScraper):
 
             if not published_date:
                 import re
-                date_pattern = re.compile(r'\d{1,2}/\d{1,2}/\d{4}|\d{1,2}\s+(?:janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+\d{4}', re.IGNORECASE)
-                header = article.find("header") if article else None
-                search_area = header or soup
-                text = search_area.get_text()
+                date_pattern = re.compile(
+                    r'\d{1,2}\s+(?:janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+\d{4}',
+                    re.IGNORECASE
+                )
+                text = soup.get_text()
                 match = date_pattern.search(text)
                 if match:
                     published_date = parse_french_date(match.group())
 
             # Extract article text
             article_text = None
-
-            # Try article body content
             if article:
-                # Remove header, footer, nav, aside from article
-                for tag in article.find_all(["header", "footer", "nav", "aside", "script", "style"]):
+                # Remove non-content elements
+                for tag in article.find_all(["header", "footer", "nav", "aside", "script", "style", "figure"]):
                     tag.decompose()
                 paragraphs = article.find_all("p")
                 if paragraphs:
-                    article_text = " ".join(p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20)
+                    article_text = " ".join(
+                        p.get_text(strip=True) for p in paragraphs
+                        if len(p.get_text(strip=True)) > 20
+                    )
 
-            # Fallback content selectors
+            # Fallback
             if not article_text or len(article_text) < 100:
-                for selector in ["div.entry-content", "div.post-content", "div.article-content", "main"]:
+                for selector in ["div.entry-content", "div.post-content", "div.article-body", "main"]:
                     elem = soup.select_one(selector)
                     if elem:
                         article_text = clean_article_text(str(elem))
