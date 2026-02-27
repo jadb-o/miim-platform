@@ -13,9 +13,12 @@ from config.settings import (
 )
 from extraction.extract_company_data import extract_company_data
 from pipeline.database_writer import DatabaseWriter
-from scrapers.leseco_scraper import LesecoScraper
-from scrapers.mcinet_scraper import McinetScraper
 from scrapers.challenge_scraper import ChallengeScraper
+from scrapers.fnh_scraper import FnhScraper
+from scrapers.leconomiste_scraper import LeconomisteScraper
+from scrapers.leseco_scraper import LesecoScraper
+from scrapers.mapbusiness_scraper import MapBusinessScraper
+from scrapers.mcinet_scraper import McinetScraper
 
 # Set up logging
 logging.basicConfig(
@@ -48,6 +51,9 @@ class PipelineOrchestrator:
             ChallengeScraper(self.supabase),
             LesecoScraper(self.supabase),
             McinetScraper(self.supabase),
+            LeconomisteScraper(self.supabase),
+            FnhScraper(self.supabase),
+            MapBusinessScraper(self.supabase),
         ]
 
         for scraper in scrapers:
