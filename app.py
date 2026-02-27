@@ -851,115 +851,119 @@ def _render_sector_network(sector_name, sector_companies_df):
 
 # ── Dialogs ──────────────────────────────────────────────
 
-@st.dialog("🏭 Sector Details", width="large")
 def show_sector_dialog(sector_name):
-    """Full-screen dialog showing sector details when a sector card is clicked."""
-    color = SECTOR_COLORS.get(sector_name, TEAL)
-    sector_df = df_filtered[df_filtered["sector_name"] == sector_name]
+    """Open a dialog named after the sector."""
+    s_icon = SECTOR_ICONS.get(sector_name, "🏭")
+    @st.dialog(f"{s_icon} {sector_name}", width="large")
+    def _dialog():
+        color = SECTOR_COLORS.get(sector_name, TEAL)
+        sector_df = df_filtered[df_filtered["sector_name"] == sector_name]
 
-    if sector_df.empty:
-        st.warning("No companies found in this sector.")
-        return
+        if sector_df.empty:
+            st.warning("No companies found in this sector.")
+            return
 
-    # Header
-    icon = SECTOR_ICONS.get(sector_name, "📦")
-    total_emp = sector_df["employee_count"].astype(float).sum()
-    n_companies = len(sector_df)
-    n_cities = sector_df["headquarters_city"].dropna().nunique()
+        # Header
+        total_emp = sector_df["employee_count"].astype(float).sum()
+        n_companies = len(sector_df)
+        n_cities = sector_df["headquarters_city"].dropna().nunique()
 
-    st.markdown(
-        f"""
-        <div class="profile-card" style="border-left: 5px solid {color};">
-            <h2 style="color:{NAVY}; margin:0;">{icon} {sector_name}</h2>
-            <div style="display:flex; gap:2rem; margin-top:0.8rem; flex-wrap:wrap; color:#555;">
-                <span>🏢 <b>{n_companies}</b> companies</span>
-                <span>👥 <b>{total_emp:,.0f}</b> total employees</span>
-                <span>📍 <b>{n_cities}</b> cities</span>
+        st.markdown(
+            f"""
+            <div class="profile-card" style="border-left: 5px solid {color};">
+                <h2 style="color:{NAVY}; margin:0;">{s_icon} {sector_name}</h2>
+                <div style="display:flex; gap:2rem; margin-top:0.8rem; flex-wrap:wrap; color:#555;">
+                    <span>🏢 <b>{n_companies}</b> companies</span>
+                    <span>👥 <b>{total_emp:,.0f}</b> total employees</span>
+                    <span>📍 <b>{n_cities}</b> cities</span>
+                </div>
             </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
 
-    # KPI metrics
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        st.metric("🏢 Companies", n_companies)
-    with m2:
-        st.metric("👥 Total Employees", f"{total_emp:,.0f}")
-    with m3:
-        avg_emp = total_emp / n_companies if n_companies > 0 else 0
-        st.metric("📊 Avg Employees", f"{avg_emp:,.0f}")
+        # KPI metrics
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            st.metric("🏢 Companies", n_companies)
+        with m2:
+            st.metric("👥 Total Employees", f"{total_emp:,.0f}")
+        with m3:
+            avg_emp = total_emp / n_companies if n_companies > 0 else 0
+            st.metric("📊 Avg Employees", f"{avg_emp:,.0f}")
 
-    # Biggest players table
-    st.markdown("##### 🏆 Biggest Players")
-    top_companies = sector_df.sort_values("employee_count", ascending=False).head(15)
-    display_cols = ["company_name", "headquarters_city", "ownership_type", "employee_count", "website_url", "parent_company"]
-    display_cols = [c for c in display_cols if c in top_companies.columns]
-    top_display = top_companies[display_cols].copy()
-    col_rename = {"company_name": "Company", "headquarters_city": "City", "ownership_type": "Ownership", "employee_count": "Employees", "website_url": "🌐 Website", "parent_company": "Parent"}
-    top_display.columns = [col_rename.get(c, c) for c in top_display.columns]
-    if "Employees" in top_display.columns:
-        top_display["Employees"] = top_display["Employees"].astype(float).map(lambda x: f"{x:,.0f}" if pd.notna(x) else "—")
-    if "🌐 Website" in top_display.columns:
-        top_display["🌐 Website"] = top_display["🌐 Website"].fillna("—")
-    st.dataframe(
-        top_display, use_container_width=True, hide_index=True,
-        column_config={"🌐 Website": st.column_config.LinkColumn("🌐 Website", display_text="Visit")} if "🌐 Website" in top_display.columns else None,
-    )
+        # Biggest players table
+        st.markdown("##### 🏆 Biggest Players")
+        top_companies = sector_df.sort_values("employee_count", ascending=False).head(15)
+        display_cols = ["company_name", "headquarters_city", "ownership_type", "employee_count", "website_url", "parent_company"]
+        display_cols = [c for c in display_cols if c in top_companies.columns]
+        top_display = top_companies[display_cols].copy()
+        col_rename = {"company_name": "Company", "headquarters_city": "City", "ownership_type": "Ownership", "employee_count": "Employees", "website_url": "🌐 Website", "parent_company": "Parent"}
+        top_display.columns = [col_rename.get(c, c) for c in top_display.columns]
+        if "Employees" in top_display.columns:
+            top_display["Employees"] = top_display["Employees"].astype(float).map(lambda x: f"{x:,.0f}" if pd.notna(x) else "—")
+        if "🌐 Website" in top_display.columns:
+            top_display["🌐 Website"] = top_display["🌐 Website"].fillna("—")
+        st.dataframe(
+            top_display, use_container_width=True, hide_index=True,
+            column_config={"🌐 Website": st.column_config.LinkColumn("🌐 Website", display_text="Visit")} if "🌐 Website" in top_display.columns else None,
+        )
 
-    # City breakdown
-    col_chart, col_ownership = st.columns(2)
-    with col_chart:
-        st.markdown("##### 📍 Companies by City")
-        city_counts = sector_df["headquarters_city"].fillna("Unknown").value_counts().reset_index()
-        city_counts.columns = ["City", "Count"]
-        if not city_counts.empty:
-            fig_city = px.bar(
-                city_counts.head(10), x="Count", y="City", orientation="h",
-                text="Count", color_discrete_sequence=[color],
-            )
-            fig_city.update_traces(textposition="outside")
-            fig_city.update_layout(
-                showlegend=False, plot_bgcolor="white", paper_bgcolor="white",
-                margin=dict(l=10, r=50, t=10, b=30), height=280,
-                font=dict(family="Arial", color=NAVY),
-            )
-            st.plotly_chart(fig_city, use_container_width=True)
+        # City breakdown
+        col_chart, col_ownership = st.columns(2)
+        with col_chart:
+            st.markdown("##### 📍 Companies by City")
+            city_counts = sector_df["headquarters_city"].fillna("Unknown").value_counts().reset_index()
+            city_counts.columns = ["City", "Count"]
+            if not city_counts.empty:
+                fig_city = px.bar(
+                    city_counts.head(10), x="Count", y="City", orientation="h",
+                    text="Count", color_discrete_sequence=[color],
+                )
+                fig_city.update_traces(textposition="outside")
+                fig_city.update_layout(
+                    showlegend=False, plot_bgcolor="white", paper_bgcolor="white",
+                    margin=dict(l=10, r=50, t=10, b=30), height=280,
+                    font=dict(family="Arial", color=NAVY),
+                )
+                st.plotly_chart(fig_city, use_container_width=True)
 
-    with col_ownership:
-        st.markdown("##### 🏛️ Ownership Breakdown")
-        own_counts = sector_df["ownership_type"].fillna("Unknown").value_counts().reset_index()
-        own_counts.columns = ["Ownership", "Count"]
-        if not own_counts.empty:
-            fig_own = px.pie(
-                own_counts, names="Ownership", values="Count", hole=0.4,
-                color_discrete_sequence=[color, NAVY, SAND, CORAL, GOLD, "#AAAAAA"],
-            )
-            fig_own.update_layout(
-                margin=dict(l=10, r=10, t=10, b=10), height=280,
-                font=dict(family="Arial", color=NAVY), paper_bgcolor="white",
-            )
-            fig_own.update_traces(textinfo="label+percent", textposition="outside")
-            st.plotly_chart(fig_own, use_container_width=True)
+        with col_ownership:
+            st.markdown("##### 🏛️ Ownership Breakdown")
+            own_counts = sector_df["ownership_type"].fillna("Unknown").value_counts().reset_index()
+            own_counts.columns = ["Ownership", "Count"]
+            if not own_counts.empty:
+                fig_own = px.pie(
+                    own_counts, names="Ownership", values="Count", hole=0.4,
+                    color_discrete_sequence=[color, NAVY, SAND, CORAL, GOLD, "#AAAAAA"],
+                )
+                fig_own.update_layout(
+                    margin=dict(l=10, r=10, t=10, b=10), height=280,
+                    font=dict(family="Arial", color=NAVY), paper_bgcolor="white",
+                )
+                fig_own.update_traces(textinfo="label+percent", textposition="outside")
+                st.plotly_chart(fig_own, use_container_width=True)
 
-    # Sector network map
-    st.markdown("##### 🕸️ Sector Network Map")
-    _render_sector_network(sector_name, sector_df)
+        # Sector network map
+        st.markdown("##### 🕸️ Sector Network Map")
+        _render_sector_network(sector_name, sector_df)
+    _dialog()
 
 
-@st.dialog("🏢 Company Profile", width="large")
 def show_company_dialog(company_name):
-    """Full-screen dialog showing company details when a company is clicked."""
-    co_match = df_filtered[df_filtered["company_name"] == company_name]
-    if co_match.empty:
-        co_match = df_companies[df_companies["company_name"] == company_name]
-    if co_match.empty:
-        st.warning(f"Company '{company_name}' not found.")
-        return
-    co = co_match.iloc[0]
-    co_id = co.get("id")
-    _render_company_profile(co, co_id)
+    """Open a dialog named after the company."""
+    @st.dialog(f"🏢 {company_name}", width="large")
+    def _dialog():
+        co_match = df_filtered[df_filtered["company_name"] == company_name]
+        if co_match.empty:
+            co_match = df_companies[df_companies["company_name"] == company_name]
+        if co_match.empty:
+            st.warning(f"Company '{company_name}' not found.")
+            return
+        co = co_match.iloc[0]
+        co_id = co.get("id")
+        _render_company_profile(co, co_id)
+    _dialog()
 
 
 # ══════════════════════════════════════════════════════════
