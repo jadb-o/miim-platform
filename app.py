@@ -1093,7 +1093,12 @@ with tab_sectors:
                 margin=dict(l=20, r=80, t=20, b=40), height=350,
                 font=dict(family="Arial", color=NAVY),
             )
-            st.plotly_chart(fig_bar, use_container_width=True)
+            event_bar = st.plotly_chart(fig_bar, use_container_width=True, on_select="rerun", key="chart_sector_bar")
+            # Handle click on bar → open sector dialog
+            if event_bar and event_bar.selection and event_bar.selection.points:
+                clicked_sector = event_bar.selection.points[0].get("y")
+                if clicked_sector and clicked_sector in all_sectors:
+                    show_sector_dialog(clicked_sector)
 
         with col_right:
             st.markdown("##### 🏛️ Companies by Ownership Type")
@@ -1112,7 +1117,17 @@ with tab_sectors:
                     font=dict(family="Arial", color=NAVY), paper_bgcolor="white",
                 )
                 fig_pie.update_traces(textinfo="label+percent", textposition="outside")
-                st.plotly_chart(fig_pie, use_container_width=True)
+                event_pie = st.plotly_chart(fig_pie, use_container_width=True, on_select="rerun", key="chart_ownership_pie")
+                if event_pie and event_pie.selection and event_pie.selection.points:
+                    clicked_label = event_pie.selection.points[0].get("label")
+                    if clicked_label:
+                        matching = df_filtered[df_filtered["ownership_type"].fillna("Unknown") == clicked_label]
+                        if not matching.empty:
+                            st.markdown(f"**{clicked_label}** — {len(matching)} companies:")
+                            for _, co in matching.head(10).iterrows():
+                                co_name = co["company_name"]
+                                if st.button(f"🏢 {co_name}", key=f"own_{co_name}"):
+                                    show_company_dialog(co_name)
 
         # Sector integration targets
         if "sector_target_pct" in df_filtered.columns:
@@ -1142,7 +1157,11 @@ with tab_sectors:
                     margin=dict(l=20, r=60, t=20, b=40), height=300,
                     font=dict(family="Arial", color=NAVY),
                 )
-                st.plotly_chart(fig_target, use_container_width=True)
+                event_target = st.plotly_chart(fig_target, use_container_width=True, on_select="rerun", key="chart_integration_targets")
+                if event_target and event_target.selection and event_target.selection.points:
+                    clicked_sector = event_target.selection.points[0].get("y")
+                    if clicked_sector and clicked_sector in all_sectors:
+                        show_sector_dialog(clicked_sector)
 
                 # Source citations for integration targets
                 source_rows = (
