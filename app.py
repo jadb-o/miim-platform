@@ -72,6 +72,16 @@ CITY_COORDS = {
     "Beni Mellal": (32.3373, -6.3498),
     "Khouribga": (32.8811, -6.9063),
     "Jorf Lasfar": (33.1167, -8.6333),
+    "Laayoune": (27.1536, -13.2033),
+    "Dakhla": (23.6848, -15.9580),
+    "Guelmim": (28.9833, -10.0572),
+    "Tan-Tan": (28.4379, -11.1033),
+    "Tiznit": (29.6974, -9.8022),
+    "Essaouira": (31.5085, -9.7595),
+    "Errachidia": (31.9314, -4.4288),
+    "Ouarzazate": (30.9189, -6.8936),
+    "Taza": (34.2133, -4.0103),
+    "Berrechid": (33.2654, -7.5876),
 }
 
 
@@ -638,20 +648,21 @@ with tab_map:
                 total_employees=("employee_count", lambda x: x.astype(float).sum()),
                 company_count=("company_name", "count"),
                 companies_list=("company_name", lambda x: ", ".join(x.tolist())),
-                avg_integration=(
-                    "local_integration_pct",
-                    lambda x: x.astype(float).mean(),
-                ),
             )
             .reset_index()
         )
 
-        # Center on Morocco
+        # Center on Morocco — use Esri tile layer (no disputed borders / pointillés)
         m = folium.Map(
-            location=[33.0, -6.5],
+            location=[31.5, -7.0],
             zoom_start=6,
-            tiles="CartoDB positron",
+            tiles=None,
         )
+        folium.TileLayer(
+            tiles="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+            attr="Esri, HERE, Garmin",
+            name="Esri Light Gray",
+        ).add_to(m)
 
         for _, row in city_data.iterrows():
             city = row["headquarters_city"]
@@ -668,7 +679,6 @@ with tab_map:
                 <h4 style="color:{NAVY}; margin:0 0 8px 0;">{city}</h4>
                 <b>Companies:</b> {row['company_count']}<br>
                 <b>Employees:</b> {row['total_employees']:,.0f}<br>
-                <b>Avg Integration:</b> {row['avg_integration']:.1f}%<br>
                 <hr style="margin:6px 0;">
                 <small>{row['companies_list']}</small>
             </div>
