@@ -24,7 +24,7 @@ class LesecoScraper(BaseScraper):
             rate_limit: Seconds between requests
         """
         super().__init__("Leseco", supabase_client, rate_limit=rate_limit)
-        self.categories = ["/categorie/economie", "/categorie/societe"]
+        self.categories = ["/business", "/maroc"]
 
     def get_article_urls(self) -> List[str]:
         """

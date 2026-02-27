@@ -179,7 +179,7 @@ class BaseScraper(ABC):
         new: int,
         dupes: int,
         duration: float,
-        status: str = "success",
+        status: str = "completed",
         error: Optional[str] = None,
     ) -> None:
         """
@@ -219,7 +219,7 @@ class BaseScraper(ABC):
             Dictionary with run statistics
         """
         start_time = time.time()
-        status = "success"
+        status = "completed"
         error_msg = None
 
         try:
@@ -252,7 +252,7 @@ class BaseScraper(ABC):
         except Exception as e:
             duration = time.time() - start_time
             error_msg = str(e)
-            status = "error"
+            status = "failed"
             self.log_run(0, 0, 0, duration, status=status, error=error_msg)
             logger.error(f"Scraper run failed for {self.source_name}: {error_msg}")
 

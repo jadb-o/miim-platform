@@ -38,7 +38,7 @@ class McinetScraper(BaseScraper):
         for page in range(1, max_pages + 1):
             try:
                 # Build URL for press releases
-                press_url = f"{self.BASE_URL}/presse?page={page}"
+                press_url = f"{self.BASE_URL}/actualites?page={page}"
                 logger.debug(f"Fetching: {press_url}")
 
                 response = self.session.get(press_url)
@@ -51,12 +51,12 @@ class McinetScraper(BaseScraper):
 
                 # Try multiple selectors for press release links
                 selectors = [
-                    "a.press-link",
-                    "h3.press-title a",
-                    "div.press-item a",
-                    "div.node--press a",
-                    "a[href*='/presse/']",
                     "article h2 a",
+                    "div.view-content a",
+                    "div.views-row a",
+                    "a[href*='/actualites/']",
+                    "a[href*='/fr/content/']",
+                    "h3 a",
                 ]
 
                 found_on_page = 0

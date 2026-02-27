@@ -24,7 +24,7 @@ class Medias24Scraper(BaseScraper):
             rate_limit: Seconds between requests
         """
         super().__init__("Medias24", supabase_client, rate_limit=rate_limit)
-        self.sections = ["/economie", "/industrie"]
+        self.sections = ["/categorie/economie"]
 
     def get_article_urls(self) -> List[str]:
         """
