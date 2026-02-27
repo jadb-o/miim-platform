@@ -2,7 +2,7 @@
 import argparse
 import logging
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from supabase import Client, create_client
 
