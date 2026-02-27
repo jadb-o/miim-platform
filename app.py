@@ -330,12 +330,8 @@ col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric("Companies Tracked", len(df_filtered))
 with col2:
-    avg_lir = (
-        df_filtered["local_integration_pct"].astype(float).mean()
-        if not df_filtered.empty
-        else 0
-    )
-    st.metric("Avg. Integration Rate", f"{avg_lir:.1f}%")
+    n_sectors = df_filtered["sector_name"].nunique() if not df_filtered.empty else 0
+    st.metric("Sectors Covered", n_sectors)
 with col3:
     total_employees = (
         df_filtered["employee_count"].astype(float).sum()
@@ -365,12 +361,10 @@ with tab_table:
         "sector_name": "Sector",
         "sub_sector": "Sub-Sector",
         "headquarters_city": "City",
-        "industrial_zone": "Industrial Zone",
-        "tier_level": "Tier",
         "ownership_type": "Ownership",
-        "local_integration_pct": "Integration %",
         "employee_count": "Employees",
         "parent_company": "Parent Company",
+        "website_url": "Website",
         "updated_at": "Last Updated",
     }
 
@@ -379,10 +373,6 @@ with tab_table:
     ].copy()
     df_display.rename(columns=display_cols, inplace=True)
 
-    if "Integration %" in df_display.columns:
-        df_display["Integration %"] = (
-            df_display["Integration %"].astype(float).map("{:.1f}%".format)
-        )
     if "Employees" in df_display.columns:
         df_display["Employees"] = (
             df_display["Employees"]
@@ -402,36 +392,33 @@ with tab_table:
     )
 
 
-# ─── TAB 2: Integration Analysis Charts ─────────────────
+# ─── TAB 2: Sector Analysis ──────────────────────────────
 with tab_chart:
+    st.markdown("#### Sector Overview")
+    st.caption("Integration rates are measured at the industry/sector level — not per company.")
+
     col_left, col_right = st.columns([3, 2])
 
     with col_left:
-        st.markdown("#### Average Local Integration Rate by Sector")
+        st.markdown("##### Companies per Sector")
 
         if not df_filtered.empty:
-            chart_data = (
+            sector_counts = (
                 df_filtered.groupby("sector_name")
-                .agg(
-                    avg_integration=("local_integration_pct", lambda x: x.astype(float).mean()),
-                    count=("company_name", "count"),
-                )
+                .agg(count=("company_name", "count"))
                 .reset_index()
-                .sort_values("avg_integration", ascending=True)
+                .sort_values("count", ascending=True)
             )
 
             fig_bar = px.bar(
-                chart_data,
-                x="avg_integration",
+                sector_counts,
+                x="count",
                 y="sector_name",
                 orientation="h",
-                text=chart_data["avg_integration"].map(lambda x: f"{x:.1f}%"),
-                labels={
-                    "avg_integration": "Average Integration Rate (%)",
-                    "sector_name": "",
-                },
-                color="avg_integration",
-                color_continuous_scale=[[0, CORAL], [0.5, SAND], [1, TEAL]],
+                text="count",
+                labels={"count": "Number of Companies", "sector_name": ""},
+                color="count",
+                color_continuous_scale=[[0, SAND], [1, TEAL]],
             )
             fig_bar.update_traces(textposition="outside")
             fig_bar.update_layout(
@@ -439,7 +426,7 @@ with tab_chart:
                 coloraxis_showscale=False,
                 plot_bgcolor="white",
                 paper_bgcolor="white",
-                xaxis=dict(range=[0, 100], gridcolor="#E8E8E8"),
+                xaxis=dict(gridcolor="#E8E8E8"),
                 yaxis=dict(gridcolor="#E8E8E8"),
                 margin=dict(l=20, r=80, t=20, b=40),
                 height=350,
@@ -450,71 +437,74 @@ with tab_chart:
             st.info("No data matches the current filters.")
 
     with col_right:
-        st.markdown("#### Companies by Tier Level")
-        if not df_filtered.empty:
-            tier_counts = (
-                df_filtered["tier_level"]
-                .value_counts()
+        st.markdown("##### Sector Integration Targets")
+        st.caption("Government targets for local integration by sector.")
+
+        # Show sector-level integration targets from the sectors table
+        if not df_filtered.empty and "sector_target_pct" in df_filtered.columns:
+            sector_targets = (
+                df_filtered.groupby("sector_name")
+                .agg(target_pct=("sector_target_pct", "first"))
                 .reset_index()
-                .rename(columns={"index": "tier_level", "count": "count"})
+                .dropna(subset=["target_pct"])
+                .sort_values("target_pct", ascending=True)
             )
-            # Ensure we use the right column names after value_counts
-            if "tier_level" in tier_counts.columns and "count" in tier_counts.columns:
-                fig_pie = px.pie(
-                    tier_counts,
-                    names="tier_level",
-                    values="count",
-                    color="tier_level",
-                    color_discrete_map=TIER_COLORS,
-                    hole=0.4,
+            if not sector_targets.empty:
+                sector_targets["target_pct"] = sector_targets["target_pct"].astype(float)
+                fig_target = px.bar(
+                    sector_targets,
+                    x="target_pct",
+                    y="sector_name",
+                    orientation="h",
+                    text=sector_targets["target_pct"].map(lambda x: f"{x:.0f}%"),
+                    labels={"target_pct": "Integration Target (%)", "sector_name": ""},
+                    color="target_pct",
+                    color_continuous_scale=[[0, CORAL], [0.5, SAND], [1, TEAL]],
                 )
-                fig_pie.update_layout(
-                    margin=dict(l=20, r=20, t=20, b=20),
+                fig_target.update_traces(textposition="outside")
+                fig_target.update_layout(
+                    showlegend=False,
+                    coloraxis_showscale=False,
+                    plot_bgcolor="white",
+                    paper_bgcolor="white",
+                    xaxis=dict(range=[0, 100], gridcolor="#E8E8E8"),
+                    margin=dict(l=20, r=60, t=20, b=40),
                     height=350,
                     font=dict(family="Arial", color=NAVY),
-                    paper_bgcolor="white",
                 )
-                fig_pie.update_traces(
-                    textinfo="label+percent",
-                    textposition="outside",
-                )
-                st.plotly_chart(fig_pie, use_container_width=True)
+                st.plotly_chart(fig_target, use_container_width=True)
+            else:
+                st.info("No integration targets set for these sectors yet.")
 
-    # ── Integration by company (detail) ──
-    st.markdown("#### Integration Rate by Company")
+    # ── Companies by ownership type ──
+    st.markdown("##### Companies by Ownership Type")
     if not df_filtered.empty:
-        df_sorted = df_filtered.sort_values(
-            "local_integration_pct", ascending=True
-        ).copy()
-        df_sorted["local_integration_pct"] = df_sorted[
-            "local_integration_pct"
-        ].astype(float)
-
-        fig_comp = px.bar(
-            df_sorted,
-            x="local_integration_pct",
-            y="company_name",
-            orientation="h",
-            color="tier_level",
-            color_discrete_map=TIER_COLORS,
-            text=df_sorted["local_integration_pct"].map(lambda x: f"{x:.0f}%"),
-            labels={
-                "local_integration_pct": "Local Integration Rate (%)",
-                "company_name": "",
-                "tier_level": "Tier Level",
-            },
+        ownership_counts = (
+            df_filtered["ownership_type"]
+            .fillna("Unknown")
+            .value_counts()
+            .reset_index()
+            .rename(columns={"index": "ownership_type", "count": "count"})
         )
-        fig_comp.update_traces(textposition="outside")
-        fig_comp.update_layout(
-            plot_bgcolor="white",
-            paper_bgcolor="white",
-            xaxis=dict(range=[0, 100], gridcolor="#E8E8E8"),
-            margin=dict(l=20, r=80, t=10, b=40),
-            height=max(300, len(df_sorted) * 40),
-            font=dict(family="Arial", color=NAVY),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        )
-        st.plotly_chart(fig_comp, use_container_width=True)
+        if "ownership_type" in ownership_counts.columns and "count" in ownership_counts.columns:
+            fig_pie = px.pie(
+                ownership_counts,
+                names="ownership_type",
+                values="count",
+                hole=0.4,
+                color_discrete_sequence=[TEAL, NAVY, SAND, CORAL, GOLD, "#AAAAAA", "#7FB3D8"],
+            )
+            fig_pie.update_layout(
+                margin=dict(l=20, r=20, t=20, b=20),
+                height=350,
+                font=dict(family="Arial", color=NAVY),
+                paper_bgcolor="white",
+            )
+            fig_pie.update_traces(
+                textinfo="label+percent",
+                textposition="outside",
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
 
 
 # ─── TAB 3: Partnership Network Graph ───────────────────
