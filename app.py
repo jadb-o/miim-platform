@@ -137,7 +137,7 @@ def load_companies():
     sb = get_supabase_client()
     resp = (
         sb.table("companies")
-        .select("*, sectors(sector_name, target_integration_pct, government_strategy, source_url, source_name_detail)")
+        .select("*, sectors(sector_name, target_integration_pct, current_integration_pct, government_strategy, source_url, source_name_detail)")
         .order("company_name")
         .execute()
     )
@@ -146,6 +146,7 @@ def load_companies():
         sector_info = r.pop("sectors", None) or {}
         r["sector_name"] = sector_info.get("sector_name", "Unknown")
         r["sector_target_pct"] = sector_info.get("target_integration_pct")
+        r["sector_current_pct"] = sector_info.get("current_integration_pct")
         r["sector_source_url"] = sector_info.get("source_url")
         r["sector_source_name"] = sector_info.get("source_name_detail")
         r["sector_strategy"] = sector_info.get("government_strategy")
@@ -885,8 +886,20 @@ def show_sector_dialog(sector_name):
             unsafe_allow_html=True,
         )
 
-        # KPI metrics
-        m1, m2, m3 = st.columns(3)
+        # KPI metrics — get integration data from first company row
+        first_co = sector_df.iloc[0]
+        target_pct = first_co.get("sector_target_pct")
+        current_pct = first_co.get("sector_current_pct")
+        strategy = first_co.get("sector_strategy")
+
+        has_target = target_pct and pd.notna(target_pct)
+        has_current = current_pct and pd.notna(current_pct)
+
+        if has_target and has_current:
+            m1, m2, m3, m4, m5 = st.columns(5)
+        else:
+            m1, m2, m3, m4, m5 = st.columns(5)
+
         with m1:
             st.metric("🏢 Companies", n_companies)
         with m2:
@@ -894,6 +907,42 @@ def show_sector_dialog(sector_name):
         with m3:
             avg_emp = total_emp / n_companies if n_companies > 0 else 0
             st.metric("📊 Avg Employees", f"{avg_emp:,.0f}")
+        with m4:
+            if has_target:
+                st.metric("🎯 Integration Target", f"{float(target_pct):.0f}%")
+            else:
+                st.metric("🎯 Integration Target", "N/A")
+        with m5:
+            if has_current:
+                delta = float(current_pct) - float(target_pct) if has_target else None
+                delta_str = f"{delta:+.0f}pp" if delta is not None else None
+                st.metric("📊 Current Integration", f"{float(current_pct):.0f}%", delta=delta_str)
+            else:
+                st.metric("📊 Current Integration", "N/A")
+
+        # Integration progress bar
+        if has_target and has_current:
+            t_val = float(target_pct)
+            c_val = float(current_pct)
+            progress = min(c_val / t_val, 1.0) if t_val > 0 else 0
+            bar_color = TEAL if progress >= 0.75 else (SAND if progress >= 0.5 else CORAL)
+            st.markdown(
+                f"""
+                <div style="margin:0.5rem 0 1.5rem 0;">
+                    <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:#666; margin-bottom:0.3rem;">
+                        <span>Current: <b>{c_val:.0f}%</b></span>
+                        <span>Target: <b>{t_val:.0f}%</b></span>
+                    </div>
+                    <div style="background:#E8ECF0; border-radius:8px; height:18px; overflow:hidden;">
+                        <div style="background:{bar_color}; width:{progress*100:.1f}%; height:100%; border-radius:8px; transition: width 0.5s;"></div>
+                    </div>
+                    <div style="text-align:center; font-size:0.75rem; color:#888; margin-top:0.2rem;">
+                        {progress*100:.0f}% of target achieved{' — ' + str(strategy) if strategy and pd.notna(strategy) else ''}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
         # Biggest players table
         st.markdown("##### 🏆 Biggest Players")
