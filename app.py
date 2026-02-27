@@ -284,12 +284,36 @@ with st.sidebar:
         st.rerun()
 
 # ── Apply filters ────────────────────────────────────────
-mask = (
-    df_companies["sector_name"].isin(selected_sectors)
-    & df_companies["headquarters_city"].isin(selected_cities)
-    & df_companies["ownership_type"].isin(selected_ownership)
-    & df_companies["tier_level"].isin(selected_tiers)
-)
+# Only apply a filter if the user has actively narrowed the selection
+# (i.e., deselected some options). When all options are selected or none
+# are selected, show everything — including companies with NULL values.
+
+mask = pd.Series(True, index=df_companies.index)
+
+if selected_sectors and len(selected_sectors) < len(all_sectors):
+    mask = mask & (
+        df_companies["sector_name"].isin(selected_sectors)
+        | df_companies["sector_name"].isna()
+    )
+
+if selected_cities and len(selected_cities) < len(all_cities):
+    mask = mask & (
+        df_companies["headquarters_city"].isin(selected_cities)
+        | df_companies["headquarters_city"].isna()
+    )
+
+if selected_ownership and len(selected_ownership) < len(all_ownership):
+    mask = mask & (
+        df_companies["ownership_type"].isin(selected_ownership)
+        | df_companies["ownership_type"].isna()
+    )
+
+if selected_tiers and len(selected_tiers) < len(all_tiers):
+    mask = mask & (
+        df_companies["tier_level"].isin(selected_tiers)
+        | df_companies["tier_level"].isna()
+    )
+
 if search_query:
     mask = mask & df_companies["company_name"].str.contains(
         search_query, case=False, na=False
