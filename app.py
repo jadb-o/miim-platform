@@ -457,8 +457,8 @@ st.markdown(
 st.markdown(
     """
     <div class="main-header">
-        <h1>Morocco Industry Intelligence Monitor</h1>
-        <p>Mapping Morocco's industrial landscape — companies, supply chains, partnerships, and market intelligence.</p>
+        <h1>🇲🇦 Morocco Industry Intelligence Monitor</h1>
+        <p>📊 Mapping Morocco's industrial landscape — companies, supply chains, partnerships, and market intelligence.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -492,7 +492,7 @@ if not data_loaded or df_companies.empty:
 # ══════════════════════════════════════════════════════════
 
 with st.sidebar:
-    st.markdown("### Filters")
+    st.markdown("### 🔎 Filters")
 
     all_sectors = sorted(df_companies["sector_name"].dropna().unique().tolist())
     selected_sectors = st.multiselect("Sector", options=all_sectors, default=[], placeholder="All sectors")
@@ -548,19 +548,19 @@ df_filtered = df_companies[mask].copy()
 
 col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
-    st.metric("Companies", len(df_filtered))
+    st.metric("🏢 Companies", len(df_filtered))
 with col2:
     n_sectors = df_filtered["sector_name"].nunique() if not df_filtered.empty else 0
-    st.metric("Sectors", n_sectors)
+    st.metric("🏭 Sectors", n_sectors)
 with col3:
     total_employees = df_filtered["employee_count"].astype(float).sum() if not df_filtered.empty else 0
-    st.metric("Total Employees", f"{total_employees:,.0f}")
+    st.metric("👥 Employees", f"{total_employees:,.0f}")
 with col4:
     n_rels = len(df_relationships) if not df_relationships.empty else 0
-    st.metric("Relationships", n_rels)
+    st.metric("🔗 Relationships", n_rels)
 with col5:
     n_articles = len(df_articles) if not df_articles.empty else 0
-    st.metric("Article Links", n_articles)
+    st.metric("📰 Articles", n_articles)
 
 
 # ══════════════════════════════════════════════════════════
@@ -813,7 +813,7 @@ def _render_sector_network(sector_name, sector_companies_df):
 
 # ── Dialogs ──────────────────────────────────────────────
 
-@st.dialog("Sector Details", width="large")
+@st.dialog("🏭 Sector Details", width="large")
 def show_sector_dialog(sector_name):
     """Full-screen dialog showing sector details when a sector card is clicked."""
     color = SECTOR_COLORS.get(sector_name, TEAL)
@@ -853,7 +853,7 @@ def show_sector_dialog(sector_name):
         st.metric("Avg Employees", f"{avg_emp:,.0f}")
 
     # Biggest players table
-    st.markdown("##### Biggest Players")
+    st.markdown("##### 🏆 Biggest Players")
     top_companies = sector_df.sort_values("employee_count", ascending=False).head(15)
     top_display = top_companies[["company_name", "headquarters_city", "ownership_type", "employee_count", "parent_company"]].copy()
     top_display.columns = ["Company", "City", "Ownership", "Employees", "Parent"]
@@ -863,7 +863,7 @@ def show_sector_dialog(sector_name):
     # City breakdown
     col_chart, col_ownership = st.columns(2)
     with col_chart:
-        st.markdown("##### Companies by City")
+        st.markdown("##### 📍 Companies by City")
         city_counts = sector_df["headquarters_city"].fillna("Unknown").value_counts().reset_index()
         city_counts.columns = ["City", "Count"]
         if not city_counts.empty:
@@ -880,7 +880,7 @@ def show_sector_dialog(sector_name):
             st.plotly_chart(fig_city, use_container_width=True)
 
     with col_ownership:
-        st.markdown("##### Ownership Breakdown")
+        st.markdown("##### 🏛️ Ownership Breakdown")
         own_counts = sector_df["ownership_type"].fillna("Unknown").value_counts().reset_index()
         own_counts.columns = ["Ownership", "Count"]
         if not own_counts.empty:
@@ -896,11 +896,11 @@ def show_sector_dialog(sector_name):
             st.plotly_chart(fig_own, use_container_width=True)
 
     # Sector network map
-    st.markdown("##### Sector Network Map")
+    st.markdown("##### 🕸️ Sector Network Map")
     _render_sector_network(sector_name, sector_df)
 
 
-@st.dialog("Company Profile", width="large")
+@st.dialog("🏢 Company Profile", width="large")
 def show_company_dialog(company_name):
     """Full-screen dialog showing company details when a company is clicked."""
     co_match = df_filtered[df_filtered["company_name"] == company_name]
@@ -919,13 +919,13 @@ def show_company_dialog(company_name):
 # ══════════════════════════════════════════════════════════
 
 tab_sectors, tab_directory, tab_network, tab_map, tab_events, tab_review = st.tabs(
-    ["Sectors", "Directory", "Network Map", "Map", "Events", "Review Queue"]
+    ["🏭 Sectors", "📋 Directory", "🕸️ Network", "🗺️ Map", "📅 Events", "✅ Review"]
 )
 
 
 # ─── TAB 1: Sectors Overview ─────────────────────────────
 with tab_sectors:
-    st.markdown("#### Sector Overview")
+    st.markdown("#### 🏭 Sector Overview")
     st.caption("Click any sector card to see the full breakdown — biggest players, network map, and more.")
 
     if not df_filtered.empty:
@@ -960,7 +960,7 @@ with tab_sectors:
         col_left, col_right = st.columns(2)
 
         with col_left:
-            st.markdown("##### Companies per Sector")
+            st.markdown("##### 📊 Companies per Sector")
             sector_counts = sector_stats.sort_values("company_count", ascending=True)
             fig_bar = px.bar(
                 sector_counts, x="company_count", y="sector_name", orientation="h",
@@ -978,7 +978,7 @@ with tab_sectors:
             st.plotly_chart(fig_bar, use_container_width=True)
 
         with col_right:
-            st.markdown("##### Companies by Ownership Type")
+            st.markdown("##### 🏛️ Companies by Ownership Type")
             ownership_counts = (
                 df_filtered["ownership_type"].fillna("Unknown").value_counts()
                 .reset_index()
@@ -1006,7 +1006,7 @@ with tab_sectors:
                 .sort_values("target_pct", ascending=True)
             )
             if not sector_targets.empty:
-                st.markdown("##### Government Integration Targets by Sector")
+                st.markdown("##### 🎯 Government Integration Targets by Sector")
                 st.caption("Target local integration rates set by Morocco's industrial strategy.")
                 sector_targets["target_pct"] = sector_targets["target_pct"].astype(float)
                 fig_target = px.bar(
@@ -1069,7 +1069,7 @@ with tab_directory:
 
 # ─── TAB 4: Interactive Network Map (vis.js) ─────────────
 with tab_network:
-    st.markdown("#### Industry Network Map")
+    st.markdown("#### 🕸️ Industry Network Map")
     st.caption("Interactive visualization of company relationships. Drag nodes, zoom, and click to highlight connections.")
 
     # Build network data
@@ -1228,7 +1228,7 @@ with tab_network:
 
 # ─── TAB 5: Map of Morocco ──────────────────────────────
 with tab_map:
-    st.markdown("#### Industrial Map of Morocco")
+    st.markdown("#### 🗺️ Industrial Map of Morocco")
     st.caption("Dot size proportional to employee count. Click markers for details.")
 
     if not df_filtered.empty:
@@ -1300,7 +1300,7 @@ with tab_map:
 
 # ─── TAB 6: Events ──────────────────────────────────────
 with tab_events:
-    st.markdown("#### Recent Industrial Events")
+    st.markdown("#### 📅 Recent Industrial Events")
 
     if not df_events.empty:
         for _, ev in df_events.head(15).iterrows():
@@ -1359,7 +1359,7 @@ with tab_events:
 with tab_review:
     from review_ui.review_helpers import load_review_items, get_review_stats, approve_item, reject_item, get_pipeline_stats
 
-    st.markdown("#### Human-in-the-Loop Review Queue")
+    st.markdown("#### ✅ Human-in-the-Loop Review Queue")
     st.markdown("Review and approve low-confidence extractions before they enter the database.")
 
     sb = get_supabase_client()
@@ -1454,7 +1454,7 @@ with tab_review:
 
     if p_stats["recent_runs"]:
         st.divider()
-        st.markdown("#### Recent Scraper Runs")
+        st.markdown("#### 🤖 Recent Scraper Runs")
         runs_df = pd.DataFrame(p_stats["recent_runs"])
         if not runs_df.empty:
             display_cols = [c for c in ["source_name", "run_date", "articles_found", "articles_new", "articles_duplicate", "status"] if c in runs_df.columns]
